@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Login - Jazz Cinnamon ERP</title>
+
+    <!-- TAGS APP MOBILE MODE -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Jazz ERP">
+
+    <link rel="apple-touch-icon" href="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/OJNDCD-10%20(1).png?alt=media">
+    <link rel="icon" type="image/png" href="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/OJNDCD-10%20(1).png?alt=media">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <style>
+        body { font-family: 'Montserrat', sans-serif; background: #0f1115; color: #e0e0e0; }
+        .bg-glass { background: rgba(26,29,36,0.85); backdrop-filter: blur(12px); border: 1px solid #2a2e39; }
+        .input-login { background: #111318; border: 1px solid #2a2e39; color: #fff; border-radius: 8px; padding: 14px 44px 14px 40px; width: 100%; outline: none; transition: 0.3s; }
+        .input-login:focus { border-color: #d4af37; box-shadow: 0 0 0 2px rgba(212,175,55,.2); }
+        .icon-input { position: absolute; left: 14px; top: 15px; color: #6b7280; }
+        .icon-eye { position: absolute; right: 14px; top: 15px; cursor: pointer; color: #6b7280; transition: color 0.2s; }
+        .icon-eye:hover { color: #d4af37; }
+        .loader { width: 18px; height: 18px; border: 2px solid transparent; border-top-color: #000; border-radius: 50%; animation: spin 1s infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+
+    <!-- EFEITO DE FUNDO -->
+    <div class="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#d4af37] rounded-full mix-blend-multiply filter blur-[150px] opacity-10"></div>
+    <div class="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-900 rounded-full mix-blend-multiply filter blur-[150px] opacity-10"></div>
+
+    <div class="bg-glass w-full max-w-md p-6 sm:p-8 rounded-2xl shadow-2xl relative z-10">
+        <div class="text-center mb-8">
+            <img src="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/logo%20branco%20(3).png?alt=media" class="h-20 sm:h-24 mx-auto mb-5 object-contain drop-shadow-lg">
+            <p class="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest font-medium">Painel de Gestão ERP</p>
+        </div>
+
+        <form id="loginForm" class="space-y-4 sm:space-y-5">
+            <div class="relative">
+                <i data-lucide="mail" class="w-5 h-5 icon-input"></i>
+                <input type="email" id="email" required placeholder="E-mail" class="input-login text-sm" autocomplete="email">
+            </div>
+
+            <div class="relative">
+                <i data-lucide="lock" class="w-5 h-5 icon-input"></i>
+                <input type="password" id="password" required placeholder="Senha" class="input-login text-sm" autocomplete="current-password">
+                <i data-lucide="eye" id="togglePassword" class="w-5 h-5 icon-eye"></i>
+            </div>
+
+            <button type="submit" id="btnLogin" class="w-full bg-[#d4af37] hover:bg-[#b5952f] transition-colors text-black font-bold uppercase tracking-widest py-3.5 sm:py-4 rounded-lg flex items-center justify-center gap-2 shadow-lg text-xs sm:text-sm mt-2">
+                <span id="loginText">Entrar</span>
+                <div id="loginSpinner" class="loader hidden"></div>
+            </button>
+        </form>
+
+        <div class="my-5 flex items-center justify-between">
+            <span class="border-b border-[#2a2e39] w-1/4"></span>
+            <span class="text-[9px] sm:text-[10px] text-gray-500 uppercase tracking-widest">ou</span>
+            <span class="border-b border-[#2a2e39] w-1/4"></span>
+        </div>
+
+        <!-- Botão Login com Google (Ajustado para Mobile) -->
+        <button type="button" id="btnGoogle" class="w-full bg-[#111318] border border-[#2a2e39] text-white font-bold uppercase tracking-widest py-3 rounded-lg hover:bg-[#1a1d24] hover:border-[#d4af37]/50 transition-all flex items-center justify-center gap-2.5 shadow-sm text-[10px] sm:text-xs">
+            <svg class="w-4 h-4 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                <path fill="none" d="M0 0h48v48H0z"/>
+            </svg>
+            <span>Entrar com Google</span>
+        </button>
+
+        <div class="mt-6 text-center text-[9px] text-gray-600 uppercase tracking-widest">
+            Acesso Restrito • Administração
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        const firebaseConfig = { 
+            apiKey: "AIzaSyBoQvjJ_j_OO6uNbW0ar-rzRiiMR2Xe8m4", 
+            authDomain: "jazz-cinnamon-erp.firebaseapp.com", 
+            projectId: "jazz-cinnamon-erp", 
+            storageBucket: "jazz-cinnamon-erp.firebasestorage.app", 
+            messagingSenderId: "359043770756", 
+            appId: "1:359043770756:web:a5a4eec50e6e40f0ebd5d1" 
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        lucide.createIcons();
+
+        // Redireciona imediatamente se já estiver logado
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.body.innerHTML = '<div class="min-h-screen flex flex-col items-center justify-center bg-[#0f1115]"><div class="w-10 h-10 border-4 border-[#2a2e39] border-t-[#d4af37] rounded-full animate-spin"></div><p class="mt-4 text-[#d4af37] font-bold uppercase tracking-widest text-xs">A Redirecionar...</p></div>';
+                window.location.replace('painel_erp.html');
+            }
+        });
+
+        const loginForm = document.getElementById("loginForm");
+        const btnLogin = document.getElementById("btnLogin");
+        const loginText = document.getElementById("loginText");
+        const loginSpinner = document.getElementById("loginSpinner");
+        const btnGoogle = document.getElementById("btnGoogle");
+        const email = document.getElementById("email");
+        const password = document.getElementById("password");
+        const togglePassword = document.getElementById("togglePassword");
+
+        togglePassword.addEventListener("click", () => {
+            if (password.type === "password") {
+                password.type = "text";
+                togglePassword.setAttribute("data-lucide", "eye-off");
+            } else {
+                password.type = "password";
+                togglePassword.setAttribute("data-lucide", "eye");
+            }
+            lucide.createIcons();
+        });
+
+        loginForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            btnLogin.disabled = true;
+            loginText.innerText = "Entrando...";
+            loginSpinner.classList.remove("hidden");
+
+            try {
+                // Removida a configuração forçada de persistência para evitar bloqueios em browsers mobile
+                const userCredential = await signInWithEmailAndPassword(auth, email.value.trim(), password.value.trim());
+                if (userCredential.user) {
+                    window.location.replace("painel_erp.html");
+                }
+            } catch (error) {
+                console.error(error);
+                let msg = "Ocorreu um erro ao entrar.";
+                if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                    msg = "E-mail ou palavra-passe incorretos.";
+                } else if (error.code === 'auth/invalid-email') {
+                    msg = "Formato de e-mail inválido.";
+                } else if (error.code === 'auth/too-many-requests') {
+                    msg = "Muitas tentativas. Tente novamente mais tarde.";
+                } else if (error.code === 'auth/network-request-failed') {
+                    msg = "Sem conexão à internet.";
+                }
+
+                Swal.fire({ icon: "error", title: "Acesso Negado", text: msg, background: "#1a1d24", color: "#fff", confirmButtonColor: "#d4af37" });
+                
+                btnLogin.disabled = false;
+                loginText.innerText = "Entrar";
+                loginSpinner.classList.add("hidden");
+            }
+        });
+
+        btnGoogle.addEventListener("click", async () => {
+            btnGoogle.disabled = true;
+            try {
+                const result = await signInWithPopup(auth, provider);
+                if (result.user) {
+                    window.location.replace("painel_erp.html");
+                }
+            } catch (error) {
+                console.error(error);
+                if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+                    Swal.fire({ icon: "error", title: "Erro", text: "Não foi possível concluir o login com Google.", background: "#1a1d24", color: "#fff", confirmButtonColor: "#d4af37" });
+                }
+                btnGoogle.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

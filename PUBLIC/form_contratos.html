@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emissão de Contrato - Jazz Cinnamon</title>
+    
+    <!-- TAGS APP MOBILE MODE -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Jazz ERP">
+
+    <link rel="apple-touch-icon" href="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/BOTAO%20ERP.png?alt=media">
+    <link rel="icon" type="image/png" href="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/BOTAO%20ERP.png?alt=media">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Montserrat', sans-serif; background: #fcfaf7; color: #1a1a1a; }
+        .input-jazz { border: none; border-bottom: 1px solid #ccc; background: transparent; padding: 10px 0; width: 100%; outline: none; transition: 0.3s; font-size: 0.875rem; }
+        .input-jazz:focus { border-bottom-color: #c5a059; }
+        .input-jazz:disabled, .input-jazz[readonly] { color: #9ca3af; border-bottom-color: #e5e7eb; background: #f9fafb; cursor: not-allowed; padding-left: 8px; border-radius: 4px; }
+        .loader { width: 20px; height: 20px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 1s infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .seccao-oculta { opacity: 0; max-height: 0; overflow: hidden; transition: all 0.5s ease-in-out; }
+        .seccao-visivel { opacity: 1; max-height: 2500px; overflow: visible; margin-top: 1.5rem; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-start p-4">
+    <div class="bg-white w-full max-w-2xl p-8 md:p-12 shadow-2xl rounded-sm border-t-4 border-[#c5a059] mt-10 mb-10 relative">
+        
+        <header class="text-center mb-10 flex flex-col items-center">
+            <div class="flex items-center justify-center gap-8 mb-6">
+                <img src="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/OJNDCD-10%20(1).png?alt=media" alt="O Jazz Nosso De Cada Dia" class="h-20 object-contain">
+                <img src="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/logo%20preto%20(2).png?alt=media" alt="Jazz Cinnamon Logo" class="h-20 object-contain">
+            </div>
+            
+            <h1 class="font-serif text-3xl mb-2 uppercase" style="font-family: 'Playfair Display', serif;">Formalização de Contrato</h1>
+            <p class="text-[10px] uppercase tracking-[0.3em] text-gray-400">Validação e Emissão Digital</p>
+        </header>
+
+        <!-- LOADING INICIAL MÁGICO -->
+        <div id="loading-inicial" class="hidden text-center py-12">
+            <div class="loader mx-auto mb-4 !border-t-[#c5a059] !border-4 !w-10 !h-10 border-gray-200"></div>
+            <p class="text-xs font-bold text-gray-500 uppercase tracking-widest animate-pulse">A carregar dados do evento...</p>
+        </div>
+
+        <!-- MENSAGEM DE ERRO SE FALTAR O ID NA URL -->
+        <div id="erro-url" class="hidden text-center py-10 bg-red-50 border border-red-200 rounded-lg">
+            <i data-lucide="alert-triangle" class="w-12 h-12 mx-auto text-red-400 mb-3"></i>
+            <h2 class="text-lg font-bold text-red-600 uppercase tracking-widest">Acesso Inválido</h2>
+            <p class="text-sm text-red-500 mt-2 max-w-sm mx-auto">Este link está incompleto ou o evento já não se encontra disponível. Por favor, solicite o link correto pelo WhatsApp oficial da banda.</p>
+        </div>
+
+        <form id="formContrato" class="space-y-8 hidden animate-[slideUpFade_0.5s_ease-out]" autocomplete="off">
+            
+            <input type="hidden" id="ct_id_pedido">
+            <input type="hidden" id="ct_email_cliente">
+            <input type="hidden" id="ct_valor_base">
+
+            <div>
+                <h3 class="text-xs font-bold uppercase text-[#c5a059] border-b border-gray-200 pb-1 mb-4 tracking-wider">Dados do Contratante</h3>
+                <p class="text-[10px] text-gray-500 mb-4 uppercase">Preencha os dados abaixo com as informações da pessoa ou empresa responsável por assinar o contrato e realizar o pagamento.</p>
+
+                <div class="mb-4">
+                    <label class="text-[9px] uppercase font-bold text-gray-500">Nome Completo / Razão Social</label>
+                    <input type="text" id="ct_nome_formal" required class="input-jazz uppercase font-bold text-gray-800" placeholder="Nome para o contrato">
+                </div>
+
+                <div class="mb-4">
+                    <div class="flex gap-4 mb-1">
+                        <label class="text-[9px] text-gray-500 cursor-pointer font-bold"><input type="radio" name="tipo_doc_ct" value="CPF" checked class="mr-1 accent-[#c5a059]" onchange="window.limparDocCt()"> CPF</label>
+                        <label class="text-[9px] text-gray-500 cursor-pointer font-bold"><input type="radio" name="tipo_doc_ct" value="CNPJ" class="mr-1 accent-[#c5a059]" onchange="window.limparDocCt()"> CNPJ</label>
+                    </div>
+                    <input type="text" id="ct_doc" required class="input-jazz" placeholder="Número do Documento" oninput="window.mascaraDocCt(this)">
+                </div>
+
+                <div class="grid grid-cols-3 gap-4 mb-4 mt-6">
+                    <div class="col-span-1">
+                        <label class="text-[9px] uppercase font-bold text-gray-500">CEP Residencial/Sede</label>
+                        <input type="text" id="contratante_cep" required class="input-jazz" placeholder="00000-000" oninput="window.mascaraCep(this)" onblur="window.buscarCep(this.value)" maxlength="9">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="text-[9px] uppercase font-bold text-gray-500">Endereço (Rua, Número, Comp)</label>
+                        <input type="text" id="contratante_endereco" required class="input-jazz uppercase" placeholder="Logradouro, nº">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-4 mb-4">
+                    <div>
+                        <label class="text-[9px] uppercase font-bold text-gray-500">Bairro</label>
+                        <input type="text" id="bairro" required class="input-jazz uppercase" placeholder="Bairro">
+                    </div>
+                    <div>
+                        <label class="text-[9px] uppercase font-bold text-gray-500">Cidade</label>
+                        <input type="text" id="ct_cidade" required class="input-jazz uppercase" placeholder="Cidade">
+                    </div>
+                    <div>
+                        <label class="text-[9px] uppercase font-bold text-gray-500">UF</label>
+                        <select id="ct_uf" required class="input-jazz uppercase">
+                            <option value="" disabled selected>UF</option>
+                            <option value="AC">AC</option><option value="AL">AL</option><option value="AP">AP</option><option value="AM">AM</option><option value="BA">BA</option><option value="CE">CE</option><option value="DF">DF</option><option value="ES">ES</option><option value="GO">GO</option><option value="MA">MA</option><option value="MT">MT</option><option value="MS">MS</option><option value="MG">MG</option><option value="PA">PA</option><option value="PB">PB</option><option value="PR">PR</option><option value="PE">PE</option><option value="PI">PI</option><option value="RJ">RJ</option><option value="RN">RN</option><option value="RS">RS</option><option value="RO">RO</option><option value="RR">RR</option><option value="SC">SC</option><option value="SP">SP</option><option value="SE">SE</option><option value="TO">TO</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-xs font-bold uppercase text-[#c5a059] border-b border-gray-200 pb-1">Logística do Evento</h3>
+                
+                <div class="bg-gray-50 p-4 rounded text-[11px] space-y-2 border border-gray-100 shadow-inner mt-4 mb-4">
+                    <p><b class="text-gray-500 uppercase">Local Base:</b> <span id="ct_nome_local" class="text-gray-700 font-bold"></span></p>
+                    <p id="ct_cidade_uf" class="text-gray-700 font-bold"></p>
+                    <p><b class="text-gray-500 uppercase">Data:</b> <span id="ct_data_label" class="text-gray-700 font-bold"></span></p>
+                    <p><b class="text-gray-500 uppercase">Horário:</b> <span id="ct_duracao_label" class="text-gray-700 font-bold"></span></p>
+                </div>
+
+                <div>
+                    <label class="text-[9px] uppercase font-bold text-gray-500">Endereço Completo do Local do Show</label>
+                    <input type="text" id="ct_local_endereco" placeholder="Ex: Rua das Flores, 123, Centro - Salão Principal" class="input-jazz bg-yellow-50/50 p-2 rounded" required>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <h3 class="text-xs font-bold uppercase text-[#c5a059] border-b border-gray-200 pb-1">Negociação Financeira</h3>
+                
+                <!-- RIDER BLOQUEADO (INEDITÁVEL) -->
+                <div class="flex items-center justify-between py-2 opacity-70">
+                    <div>
+                        <p class="text-xs font-bold text-gray-700">Rider Técnico (Som/Luz)</p>
+                        <p class="text-[9px] text-gray-500">Estrutura profissional exigida.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="ct_rider" class="w-5 h-5 accent-[#c5a059] cursor-not-allowed" disabled>
+                        <label for="ct_rider" id="label_rider" class="text-xs font-black text-gray-800 cursor-not-allowed">NÃO</label>
+                    </div>
+                </div>
+
+                <!-- BOTÃO NF LIBERADO PARA ESCOLHA -->
+                <div class="flex items-center justify-between border-t border-gray-100 pt-4">
+                    <div>
+                        <span class="text-xs font-bold text-gray-700">Emissão de Nota Fiscal</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="ct_nf" class="w-5 h-5 accent-[#c5a059] cursor-pointer" onchange="window.atualizarValorFinal()">
+                        <span id="label_nf" class="text-xs font-black text-gray-800">NÃO</span>
+                    </div>
+                </div>
+
+                <div class="text-center pt-6">
+                    <p class="text-[9px] uppercase font-bold text-gray-400">Valor Final Acordado</p>
+                    <input type="text" id="ct_valor_final" class="text-3xl font-bold text-center w-full outline-none bg-transparent text-green-600" readonly value="R$ 0,00">
+                </div>
+            </div>
+
+            <div class="bg-gray-50 p-5 border border-gray-200 rounded text-xs text-gray-500 text-justify leading-relaxed">
+                <p class="mb-2 font-bold uppercase text-gray-700">Declaração de Veracidade</p>
+                Declaro sob as penas da lei que as informações fornecidas acima são verdadeiras e exatas. Estou ciente de que estes dados serão utilizados exclusivamente para a qualificação e emissão do Contrato de Prestação de Serviços Musicais, o qual será enviado ao meu e-mail para conferência e assinatura.
+            </div>
+
+            <button type="submit" id="btnEnviar" class="w-full bg-black text-white py-5 rounded-lg font-black uppercase tracking-[0.2em] hover:bg-[#c5a059] transition flex justify-center items-center gap-3 shadow-2xl">
+                <span>Confirmar e Gerar Contrato</span>
+                <div id="btn-spinner" class="loader hidden"></div>
+            </button>
+        </form>
+
+        <div id="sucesso-cliente" class="hidden text-center py-12">
+            <div class="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-green-100 mb-6">
+                <i data-lucide="check" class="h-10 w-10 text-green-600"></i>
+            </div>
+            <h2 class="text-2xl font-black font-serif mb-3 uppercase" style="font-family: 'Playfair Display', serif;">Contrato Gerado com Sucesso!</h2>
+            <p class="text-gray-600 text-sm max-w-sm mx-auto leading-relaxed">Os seus dados foram validados. O contrato finalizado foi enviado para o seu e-mail para conferência e assinatura digital.</p>
+        </div>
+    </div>
+
+    <!-- SCRIPT FIREBASE -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const URL_BACKEND = "https://script.google.com/macros/s/AKfycbx9NsoG0R-NNtbECB-Qw96YDcZaexKDmbfH90vIiXzwElYALIJBO5NdUC9tCuO4AXUh/exec";
+
+        const firebaseConfig = { apiKey: "AIzaSyBoQvjJ_j_OO6uNbW0ar-rzRiiMR2Xe8m4", authDomain: "jazz-cinnamon-erp.firebaseapp.com", projectId: "jazz-cinnamon-erp", storageBucket: "jazz-cinnamon-erp.firebasestorage.app", messagingSenderId: "359043770756", appId: "1:359043770756:web:a5a4eec50e6e40f0ebd5d1" };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        window.pedidoAtualId = null;
+        window.pedidoAtualDados = null;
+        window.valorBase = 0;
+
+        // Captura o ID Inteligente da URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const eventId = urlParams.get('id');
+
+        window.onload = () => { 
+            lucide.createIcons(); 
+            if (!eventId) {
+                document.getElementById('erro-url').classList.remove('hidden');
+            } else {
+                document.getElementById('loading-inicial').classList.remove('hidden');
+                window.carregarDadosDoLink(eventId);
+            }
+        };
+
+        window.parseMoeda = (v) => { 
+            if (v === undefined || v === null || v === "") return 0;
+            if (typeof v === 'number') return v;
+            let num = parseFloat(String(v).replace(/[R$\s.]/g, "").replace(",", ".")); 
+            return isNaN(num) ? 0 : num; 
+        };
+
+        window.limparDocCt = () => { document.getElementById('ct_doc').value = ''; };
+
+        window.mascaraDocCt = (i) => {
+            const tipo = document.querySelector('input[name="tipo_doc_ct"]:checked').value;
+            let v = i.value.replace(/\D/g, "");
+            if (tipo === 'CPF') {
+                if (v.length > 11) v = v.substring(0, 11);
+                v = v.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+            } else {
+                if (v.length > 14) v = v.substring(0, 14);
+                v = v.replace(/^(\d{2})(\d)/, "$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d)/, "$1-$2");
+            }
+            i.value = v;
+        };
+
+        window.mascaraCep = (i) => { 
+            let v = i.value.replace(/\D/g,""); if(v.length > 8) v = v.substring(0,8); 
+            v = v.replace(/^(\d{5})(\d)/,"$1-$2"); i.value = v; 
+        };
+
+        window.horaTerminoCalculado = (inicio, duracao) => {
+            if (!inicio) return '??:??';
+            let [h, m] = inicio.split(':').map(Number);
+            let dur = 120; // 2h default
+            if (duracao) dur = parseFloat(duracao.replace(':', '.')) * 60;
+            let totalM = h * 60 + m + dur;
+            let hF = Math.floor(totalM / 60) % 24;
+            let mF = totalM % 60;
+            return `${String(hF).padStart(2, '0')}:${String(mF).padStart(2, '0')}`;
+        };
+
+        window.carregarDadosDoLink = async (id) => {
+            try {
+                // BUSCA DIRETA E INTELIGENTE PELO ID
+                const docRef = doc(db, "pedidos", id);
+                const snap = await getDoc(docRef);
+                
+                if (snap.exists() && snap.data().status !== 'REPROVADO' && snap.data().status !== 'LIXEIRA') {
+                    const pedidoEncontrado = snap.data();
+                    window.pedidoAtualId = snap.id;
+                    window.pedidoAtualDados = pedidoEncontrado;
+
+                    let isNfOriginal = (pedidoEncontrado.temNf === "SIM");
+                    let valorNumTotal = window.parseMoeda(pedidoEncontrado.valor);
+                    window.valorBase = isNfOriginal ? (valorNumTotal / 1.12) : valorNumTotal;
+                    
+                    document.getElementById('ct_valor_base').value = window.valorBase;
+                    document.getElementById('ct_nf').checked = isNfOriginal;
+                    document.getElementById('label_nf').innerText = isNfOriginal ? "SIM" : "NÃO";
+                    document.getElementById('ct_valor_final').value = valorNumTotal.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+
+                    let dataFormatada = pedidoEncontrado.dataStr;
+                    if(dataFormatada && dataFormatada.includes('-')) dataFormatada = dataFormatada.split('-').reverse().join('/');
+
+                    let inicio = pedidoEncontrado.horaInicio || '--:--';
+                    let termino = pedidoEncontrado.horaTermino || window.horaTerminoCalculado(pedidoEncontrado.horaInicio, pedidoEncontrado.duracao);
+
+                    document.getElementById('ct_nome_local').innerText = pedidoEncontrado.local || "N/A";
+                    document.getElementById('ct_cidade_uf').innerText = `${pedidoEncontrado.cidade || ''} - ${pedidoEncontrado.uf || ''}`;
+                    document.getElementById('ct_data_label').innerText = dataFormatada || "Não informada";
+                    document.getElementById('ct_duracao_label').innerText = `Das ${inicio} às ${termino}`;
+
+                    // Pré-preenchimento editável (Herdado do evento)
+                    document.getElementById('ct_nome_formal').value = pedidoEncontrado.cliente || "";
+                    document.getElementById('ct_doc').value = pedidoEncontrado.documento || "";
+                    
+                    if (pedidoEncontrado.dadosContrato) {
+                        const dc = pedidoEncontrado.dadosContrato;
+                        document.getElementById('ct_nome_formal').value = dc.nome_contratante_formal || pedidoEncontrado.cliente;
+                        document.getElementById('ct_doc').value = dc.documento || pedidoEncontrado.documento;
+                        
+                        if(dc.endereco) {
+                            document.getElementById('contratante_cep').value = dc.endereco.cep || "";
+                            document.getElementById('contratante_endereco').value = dc.endereco.logradouro || "";
+                            document.getElementById('bairro').value = dc.endereco.bairro || "";
+                            document.getElementById('ct_cidade').value = dc.endereco.cidade || "";
+                            document.getElementById('ct_uf').value = dc.endereco.uf || "";
+                        }
+                    }
+
+                    if (document.getElementById('ct_doc').value) {
+                        let isCnpj = document.getElementById('ct_doc').value.replace(/\D/g,"").length > 11;
+                        document.querySelector(`input[name="tipo_doc_ct"][value="${isCnpj?'CNPJ':'CPF'}"]`).checked = true;
+                        window.mascaraDocCt(document.getElementById('ct_doc'));
+                    }
+
+                    // Regra do Rider (INEDITÁVEL)
+                    const conv = parseInt(pedidoEncontrado.convidados) || 0;
+                    const ckRider = document.getElementById('ct_rider');
+                    const labelRider = document.getElementById('label_rider');
+                    ckRider.disabled = true;
+                    if(conv >= 80) {
+                        ckRider.checked = true; 
+                        labelRider.innerText = "SIM";
+                        labelRider.classList.add('text-[#c5a059]');
+                    } else { 
+                        ckRider.checked = false;
+                        labelRider.innerText = "NÃO"; 
+                        labelRider.classList.remove('text-[#c5a059]');
+                    }
+
+                    window.atualizarValorFinal();
+
+                    // Esconde Loading e Mostra Formulário Mágico
+                    document.getElementById('loading-inicial').classList.add('hidden');
+                    document.getElementById('formContrato').classList.remove('hidden');
+
+                } else {
+                    document.getElementById('loading-inicial').classList.add('hidden');
+                    document.getElementById('erro-url').classList.remove('hidden');
+                }
+            } catch(e) {
+                console.error(e);
+                document.getElementById('loading-inicial').classList.add('hidden');
+                Swal.fire('Erro', 'Falha ao carregar os dados do evento. Verifique a sua conexão à internet.', 'error');
+            }
+        };
+
+        window.buscarCep = async (cepInput) => {
+            const cep = cepInput.replace(/\D/g, '');
+            if (cep.length !== 8) return;
+            try {
+                const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+                const data = await response.json();
+                if (!data.erro) {
+                    document.getElementById('contratante_endereco').value = data.logradouro.toUpperCase();
+                    document.getElementById('bairro').value = data.bairro.toUpperCase();
+                    document.getElementById('ct_cidade').value = data.localidade.toUpperCase();
+                    document.getElementById('ct_uf').value = data.uf.toUpperCase();
+                }
+            } catch (error) { console.warn("Erro ao buscar CEP", error); }
+        };
+
+        window.atualizarValorFinal = () => {
+            const comNota = document.getElementById('ct_nf').checked;
+            document.getElementById('label_nf').innerText = comNota ? "SIM" : "NÃO";
+            let final = window.valorBase;
+            if (comNota) final = final * 1.12;
+            document.getElementById('ct_valor_final').value = final.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+        };
+
+        document.getElementById('formContrato').onsubmit = async (e) => {
+            e.preventDefault(); 
+            
+            if(!window.pedidoAtualId || !window.pedidoAtualDados) return;
+
+            document.getElementById('btn-spinner').classList.remove('hidden');
+            
+            const isNf = document.getElementById('ct_nf').checked;
+            let finalValue = window.valorBase * (isNf ? 1.12 : 1);
+
+            const dadosContrato = {
+                nome_contratante_formal: document.getElementById('ct_nome_formal').value.toUpperCase(),
+                documento: document.getElementById('ct_doc').value,
+                contratante_cep: document.getElementById('contratante_cep').value,
+                contratante_endereco: document.getElementById('contratante_endereco').value.toUpperCase(),
+                bairro: document.getElementById('bairro').value.toUpperCase(),
+                contratante_cidade: document.getElementById('ct_cidade').value.toUpperCase(),
+                contratante_uf: document.getElementById('ct_uf').value.toUpperCase(),
+                local_evento_endereco: document.getElementById('ct_local_endereco').value.toUpperCase(),
+                tem_rider: document.getElementById('ct_rider').checked ? "SIM" : "NÃO",
+                tem_nf: isNf ? "SIM" : "NÃO",
+                valor_final_contrato: finalValue
+            };
+
+            try {
+                // ATUALIZA O FIREBASE COM A NOVA ESCOLHA DE NF E O NOVO VALOR GLOBAL
+                await updateDoc(doc(db, "pedidos", window.pedidoAtualId), {
+                    dadosContrato: dadosContrato,
+                    valor: finalValue,
+                    temNf: isNf ? "SIM" : "NÃO",
+                    status: window.pedidoAtualDados.status === 'PRE_RESERVA' ? 'RESERVA' : window.pedidoAtualDados.status
+                });
+
+                const payloadBackend = {
+                    acao: "GERAR_PDF_CONTRATO",
+                    email_cliente: window.pedidoAtualDados.email,
+                    ...window.pedidoAtualDados, 
+                    ...dadosContrato 
+                };
+
+                const req = await fetch(URL_BACKEND, {
+                    method: 'POST',
+                    body: JSON.stringify(payloadBackend)
+                }).then(r => r.json());
+
+                if (req.success) {
+                    let rawAnexos = [];
+                    if (window.pedidoAtualDados.anexos) {
+                        if (Array.isArray(window.pedidoAtualDados.anexos)) rawAnexos = [...window.pedidoAtualDados.anexos];
+                        else Object.values(window.pedidoAtualDados.anexos).forEach(a => rawAnexos.push(a));
+                    }
+                    
+                    let countCt = rawAnexos.filter(a => a.nome.toUpperCase().includes('CONTRATO')).length;
+                    rawAnexos.push({ nome: `Contrato (${countCt + 1})`, url: req.pdfUrl, data: new Date().toISOString() });
+
+                    await updateDoc(doc(db, "pedidos", window.pedidoAtualId), {
+                        anexos: rawAnexos,
+                        linkContrato: "" // Limpa o legado para não duplicar
+                    });
+
+                    document.getElementById('formContrato').classList.add('hidden');
+                    document.getElementById('erro-url').classList.add('hidden');
+                    document.getElementById('sucesso-cliente').classList.remove('hidden');
+                } else {
+                    throw new Error(req.error || "Falha na geração do PDF.");
+                }
+
+            } catch (err) { 
+                console.error(err);
+                Swal.fire("Erro", "Ocorreu um problema ao gerar o contrato. Tente novamente.", "error"); 
+            } finally { 
+                document.getElementById('btn-spinner').classList.add('hidden'); 
+            }
+        };
+    </script>
+</body>
+</html>

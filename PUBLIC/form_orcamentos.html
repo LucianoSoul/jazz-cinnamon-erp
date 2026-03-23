@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emissão de Contrato - Jazz Cinnamon</title>
+    
+    <!-- TAGS APP MOBILE MODE -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Jazz ERP">
+
+    <link rel="apple-touch-icon" href="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/BOTAO%20ERP.png?alt=media">
+    <link rel="icon" type="image/png" href="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/BOTAO%20ERP.png?alt=media">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Montserrat', sans-serif; background: #fcfaf7; color: #1a1a1a; }
+        .input-jazz { border: none; border-bottom: 1px solid #ccc; background: transparent; padding: 10px 0; width: 100%; outline: none; transition: 0.3s; font-size: 0.875rem; }
+        .input-jazz:focus { border-bottom-color: #c5a059; }
+        .input-jazz:disabled, .input-jazz[readonly] { color: #9ca3af; border-bottom-color: #e5e7eb; background: #f9fafb; cursor: not-allowed; padding-left: 8px; border-radius: 4px; }
+        .loader { width: 20px; height: 20px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 1s infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .seccao-oculta { opacity: 0; max-height: 0; overflow: hidden; transition: all 0.5s ease-in-out; }
+        .seccao-visivel { opacity: 1; max-height: 2500px; overflow: visible; margin-top: 1.5rem; }
+        
+        /* Transição suave para mudança de texto de status */
+        #status-data { transition: color 0.3s ease; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-start p-4">
+    <div class="bg-white w-full max-w-2xl p-8 md:p-12 shadow-2xl rounded-sm border-t-4 border-[#c5a059] mt-10 mb-10 relative">
+        
+        <header class="text-center mb-10 flex flex-col items-center">
+            <div class="flex items-center justify-center gap-8 mb-6">
+                <img src="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/OJNDCD-10%20(1).png?alt=media" alt="O Jazz Nosso De Cada Dia" class="h-20 object-contain">
+                <img src="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/logo%20preto%20(2).png?alt=media" alt="Jazz Cinnamon Logo" class="h-20 object-contain">
+            </div>
+            
+            <h1 class="font-serif text-3xl mb-2 uppercase" style="font-family: 'Playfair Display', serif;">Orçamento Jazz Cinnamon</h1>
+            <p class="text-[10px] uppercase tracking-[0.3em] text-gray-400">Solicitação de Data e Reserva</p>
+        </header>
+
+        <form id="formCliente" class="space-y-6" autocomplete="off">
+            
+            <!-- SELEÇÃO DE CPF / CNPJ -->
+            <div>
+                <div class="flex gap-6 mb-2">
+                    <label class="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-500 uppercase tracking-widest hover:text-[#c5a059] transition">
+                        <input type="radio" name="tipo_doc" value="CPF" checked class="accent-[#c5a059] w-4 h-4" onchange="window.mudarTipoDoc()"> CPF
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-500 uppercase tracking-widest hover:text-[#c5a059] transition">
+                        <input type="radio" name="tipo_doc" value="CNPJ" class="accent-[#c5a059] w-4 h-4" onchange="window.mudarTipoDoc()"> CNPJ
+                    </label>
+                </div>
+                <div class="relative">
+                    <!-- Adicionado oninput para aplicar a máscara na hora da digitação -->
+                    <input type="text" id="documento" placeholder="000.000.000-00" required class="input-jazz" oninput="window.formatarCpfCnpj(this)" onblur="window.triggerBusca(this.value)">
+                    <span id="txt-buscando" class="absolute right-0 top-3 text-[8px] font-bold text-amber-600 hidden animate-pulse">PROCURANDO...</span>
+                </div>
+            </div>
+
+            <input type="text" id="nome_razao" placeholder="Nome Completo ou Razão Social" required class="input-jazz uppercase">
+            
+            <div class="grid grid-cols-2 gap-4">
+                <input type="tel" id="whatsapp" placeholder="WhatsApp" required class="input-jazz">
+                <input type="email" id="email" placeholder="E-mail" required class="input-jazz">
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <div><label class="text-[9px] uppercase font-bold text-gray-400">Data</label><input type="date" id="data_evento" value="" required class="input-jazz text-sm" onchange="window.triggerVerificacao()"></div>
+                <div><label class="text-[9px] uppercase font-bold text-gray-400">Horário</label><input type="time" id="hora_inicio" required class="input-jazz text-sm" onchange="window.triggerVerificacao()"></div>
+                <div><label class="text-[9px] uppercase font-bold text-gray-400">Duração</label><select id="duracao" class="input-jazz text-sm" onchange="window.triggerVerificacao()"><option value="1:00">1h</option><option value="1:30" selected>1,5h</option><option value="2:00">2h</option><option value="2:30">2,5h</option><option value="3:00">3h</option></select></div>
+            </div>
+
+            <!-- STATUS DINÂMICO E AUTO-EXPLICATIVO POSICIONADO ESTRATEGICAMENTE AQUI -->
+            <span id="status-data" class="text-[10px] font-bold flex items-center justify-center min-h-[3rem] uppercase border border-dashed border-gray-200 p-2 rounded text-center"></span>
+
+            <div class="grid grid-cols-2 gap-4">
+                <select id="estado" required class="input-jazz" onchange="window.carregarCidades()">
+                    <option value="" disabled selected>UF</option>
+                    <option value="RS">RS</option><option value="SC">SC</option><option value="PR">PR</option><option value="SP">SP</option>
+                </select>
+                <select id="cidade" required class="input-jazz" onchange="window.triggerVerificacao()">
+                    <option value="" disabled selected>Selecione a UF primeiro...</option>
+                </select>
+            </div>
+
+            <input type="text" id="local_nome" placeholder="Nome do Local (Buffet, Quinta, etc)" required class="input-jazz uppercase">
+            
+            <div class="grid grid-cols-2 gap-4">
+                <!-- LISTA DE EVENTOS ATUALIZADA -->
+                <select id="tipo_evento" required class="input-jazz uppercase text-sm">
+                    <option value="" disabled selected>Tipo de Evento...</option>
+                    <option value="ANIVERSÁRIO">Aniversário</option>
+                    <option value="CORPORATIVO">Corporativo</option>
+                    <option value="CASAMENTO">Casamento</option>
+                    <option value="BODAS">Bodas</option>
+                    <option value="JANTAR">Jantar</option>
+                    <option value="FESTIVAL">Festival</option>
+                    <option value="OUTROS">Outros</option>
+                </select>
+                <input type="number" id="convidados" placeholder="Qtd Convidados" required class="input-jazz text-sm">
+            </div>
+
+            <button type="submit" id="btnEnviar" class="w-full bg-black text-white py-4 rounded font-bold uppercase text-xs tracking-widest hover:bg-[#c5a059] transition flex justify-center items-center gap-2">
+                <span>Enviar Solicitação</span>
+                <div id="btn-spinner" class="loader hidden"></div>
+            </button>
+        </form>
+
+        <div id="sucesso-cliente" class="hidden text-center py-10">
+            <div class="text-5xl text-green-500 mb-4">✓</div>
+            <h2 class="text-xl font-bold">Solicitação Enviada!</h2>
+        </div>
+    </div>
+
+    <!-- SCRIPT FIREBASE -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // URL do Google Apps Script (Mantida do original)
+        const URL_BACKEND = "https://script.google.com/macros/s/AKfycbx9NsoG0R-NNtbECB-Qw96YDcZaexKDmbfH90vIiXzwElYALIJBO5NdUC9tCuO4AXUh/exec";
+
+        const firebaseConfig = { apiKey: "AIzaSyBoQvjJ_j_OO6uNbW0ar-rzRiiMR2Xe8m4", authDomain: "jazz-cinnamon-erp.firebaseapp.com", projectId: "jazz-cinnamon-erp", storageBucket: "jazz-cinnamon-erp.firebasestorage.app", messagingSenderId: "359043770756", appId: "1:359043770756:web:a5a4eec50e6e40f0ebd5d1" };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        window.estadoAgenda = "LIVRE";
+        window.concorrentesEncontrados = [];
+        window.statusTimeout = null;
+
+        // SUBSTITUIÇÃO 1: Evita bloqueios de carregamento no Deploy garantindo a exibição inicial
+        setTimeout(() => {
+            document.getElementById('data_evento').value = '';
+            document.getElementById('status-data').innerText = '👉 PREENCHA A DATA PARA CONSULTAR A DISPONIBILIDADE';
+            document.getElementById('status-data').style.color = '#9ca3af';
+            if(window.lucide) window.lucide.createIcons();
+        }, 100);
+
+        // 1. MUDAR PLACEHOLDER QUANDO TROCA DE CPF PARA CNPJ
+        window.mudarTipoDoc = () => {
+            const tipo = document.querySelector('input[name="tipo_doc"]:checked').value;
+            const inputDoc = document.getElementById('documento');
+            inputDoc.value = ''; // Limpa o campo ao trocar para não quebrar a máscara
+            inputDoc.placeholder = tipo === 'CPF' ? '000.000.000-00' : '00.000.000/0000-00';
+            document.getElementById('txt-buscando').classList.add('hidden');
+        };
+
+        // 2. MÁSCARA FORTE E DINÂMICA
+        window.formatarCpfCnpj = (i) => {
+            const tipo = document.querySelector('input[name="tipo_doc"]:checked').value;
+            let v = i.value.replace(/\D/g, ""); // Remove tudo o que não é dígito
+
+            if (tipo === 'CPF') {
+                if (v.length > 11) v = v.substring(0, 11);
+                v = v.replace(/(\d{3})(\d)/, "$1.$2");
+                v = v.replace(/(\d{3})(\d)/, "$1.$2");
+                v = v.replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+            } else {
+                // CNPJ
+                if (v.length > 14) v = v.substring(0, 14);
+                v = v.replace(/^(\d{2})(\d)/, "$1.$2");
+                v = v.replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3");
+                v = v.replace(/\.(\d{3})(\d)/, ".$1/$2");
+                v = v.replace(/(\d{4})(\d)/, "$1-$2");
+            }
+            i.value = v;
+        };
+
+        window.carregarCidades = async () => {
+            const uf = document.getElementById('estado').value;
+            const cidadeSelect = document.getElementById('cidade');
+            if (!uf) return;
+            cidadeSelect.innerHTML = '<option value="" disabled selected>Carregando...</option>';
+            try {
+                const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios`);
+                const cidades = await res.json();
+                cidadeSelect.innerHTML = '<option value="" disabled selected>Selecione o Município</option>';
+                cidades.forEach(c => cidadeSelect.innerHTML += `<option value="${c.nome.toUpperCase()}">${c.nome.toUpperCase()}</option>`);
+            } catch(e) { cidadeSelect.innerHTML = '<option value="" disabled selected>Erro ao carregar</option>'; }
+        };
+
+        // 3. BUSCA OTIMIZADA PARA CPF OU CNPJ COMPLETO
+        window.triggerBusca = async (docVal) => {
+            const docLimpo = docVal.replace(/\D/g, "");
+            const tipo = document.querySelector('input[name="tipo_doc"]:checked').value;
+            
+            // Só dispara a busca se tiver o tamanho exato, economizando requisições
+            if (tipo === 'CPF' && docLimpo.length !== 11) return;
+            if (tipo === 'CNPJ' && docLimpo.length !== 14) return;
+
+            document.getElementById('txt-buscando').classList.remove('hidden');
+            try {
+                // Delay artificial de 1.3 segundos para melhorar a experiência do usuário (UX)
+                await new Promise(resolve => setTimeout(resolve, 1300));
+                
+                const q = query(collection(db, "pedidos"), where("documentoLimpo", "==", docLimpo));
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                    const d = snap.docs[0].data();
+                    document.getElementById('nome_razao').value = d.cliente || "";
+                    document.getElementById('whatsapp').value = d.whatsapp || "";
+                    document.getElementById('email').value = d.email || "";
+                }
+            } catch(e) {} finally { document.getElementById('txt-buscando').classList.add('hidden'); }
+        };
+
+        const setStatusStep = (textoInicial, textoSecundario, cor, delayMs = 2000) => {
+            const label = document.getElementById('status-data');
+            if(window.statusTimeout) clearTimeout(window.statusTimeout);
+            
+            label.innerText = textoInicial;
+            label.style.color = cor;
+            
+            if (textoSecundario) {
+                window.statusTimeout = setTimeout(() => {
+                    label.innerText = textoSecundario;
+                    label.classList.add('animate-pulse');
+                    setTimeout(() => label.classList.remove('animate-pulse'), 1200);
+                }, delayMs);
+            }
+        };
+
+        window.triggerVerificacao = async () => {
+            const dataInput = document.getElementById('data_evento').value;
+            const horaIni = document.getElementById('hora_inicio').value;
+            const duracao = document.getElementById('duracao').value;
+            const cidadeInput = document.getElementById('cidade').options[document.getElementById('cidade').selectedIndex]?.value || "";
+            const estadoInput = document.getElementById('estado').value || "";
+            
+            window.concorrentesEncontrados = []; window.estadoAgenda = "LIVRE";
+            
+            if(!dataInput) {
+                setStatusStep('👉 PREENCHA A DATA PARA CONSULTAR A DISPONIBILIDADE', null, '#9ca3af');
+                return;
+            }
+
+            setStatusStep('⏳ CONSULTANDO AGENDA INTERNA E GOOGLE...', null, '#999');
+            
+            // PREPARA OS 3 FORMATOS DE DATA PARA BUSCAR TUDO CEGAMENTE
+            const p = dataInput.split('-'); 
+            const f1 = `${p[2]}-${p[1]}-${p[0]}`; // DD-MM-YYYY
+            const f2 = `${p[0]}-${p[1]}-${p[2]}`; // YYYY-MM-DD
+            const f3 = `${p[2]}/${p[1]}/${p[0]}`; // DD/MM/YYYY
+
+            // 1. Consulta ao Firebase (com os 3 formatos para não falhar)
+            try {
+                const [s1, s2, s3] = await Promise.all([
+                    getDocs(query(collection(db, "pedidos"), where("dataStr", "==", f1))),
+                    getDocs(query(collection(db, "pedidos"), where("dataStr", "==", f2))),
+                    getDocs(query(collection(db, "pedidos"), where("dataStr", "==", f3)))
+                ]);
+                
+                [s1, s2, s3].forEach(snap => {
+                    snap.forEach(d => { 
+                        if(d.data().status !== 'REPROVADO' && d.data().status !== 'LIXEIRA') {
+                            // Evita adicionar o mesmo evento duas vezes se ele bater em mais de um formato
+                            if(!window.concorrentesEncontrados.find(c => c.id === d.id)) {
+                                window.concorrentesEncontrados.push({id: d.id, ...d.data(), origem: 'sistema_interno'}); 
+                            }
+                        }
+                    });
+                });
+            } catch(e) { console.error("Erro na busca Firebase:", e); }
+
+            // 2. Consulta à Google Agenda (EXTERNOS)
+            try {
+                const reqAg = await fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify({ acao: "VERIFICAR_AGENDA_DIA", dataBusca: f1 }) }).then(r => r.json());
+                if (reqAg.eventosExternos) {
+                    reqAg.eventosExternos.forEach(ex => {
+                        window.concorrentesEncontrados.push({ 
+                            id: 'ext_' + Math.random(),
+                            status: 'CONFIRMADO', 
+                            horaInicio: ex.horaInicio, 
+                            horaTermino: ex.horaTermino, 
+                            cliente: ex.titulo, 
+                            origem: 'google_calendar' 
+                        });
+                    });
+                }
+            } catch(e) { console.error("Erro na busca Agenda:", e); }
+
+            if (window.concorrentesEncontrados.length === 0) {
+                setStatusStep("✔ DATA TOTALMENTE LIVRE PARA O SEU EVENTO!", null, "#10b981");
+                window.estadoAgenda = "LIVRE"; 
+                return;
+            }
+
+            if (!horaIni) {
+                setStatusStep(
+                    "⚠️ JÁ EXISTEM EVENTOS NESTA DATA.", 
+                    "👉 PREENCHA O HORÁRIO PARA AVALIARMOS A LOGÍSTICA DE DESLOCAMENTO.", 
+                    "#f59e0b", 
+                    2000
+                );
+                window.estadoAgenda = "PENDENTE";
+                return;
+            }
+
+            if (!estadoInput || !cidadeInput) {
+                setStatusStep(
+                    "⚠️ HORÁRIO REGISTRADO E PRÉ-ANALISADO.", 
+                    "👉 PREENCHA ESTADO E MUNICÍPIO PARA CONFIRMARMOS O DESLOCAMENTO.", 
+                    "#f59e0b", 
+                    1800
+                );
+                window.estadoAgenda = "PENDENTE";
+                return;
+            }
+
+            // CORREÇÃO MATEMÁTICA DO TEMPO (Para 1:30h bater em 90 min)
+            let [nh, nm] = horaIni.split(':').map(Number);
+            let novoIniMin = (nh * 60) + nm;
+            
+            let [dh, dm] = (duracao || '2:00').split(':').map(Number);
+            let dMin = (dh * 60) + (dm || 0);
+            let novoFimMin = novoIniMin + dMin;
+
+            let piorCenario = "LIVRE"; 
+            let msgFinal = "";
+            let colorFinal = "";
+
+            for (let ev of window.concorrentesEncontrados) {
+                let evUF = (ev.uf || "").toUpperCase();
+                let evCidade = (ev.cidade || "").toUpperCase();
+                if(evCidade.includes(" - ")) evCidade = evCidade.split(" - ")[1].trim();
+
+                if (evUF && estadoInput && evUF !== estadoInput && evUF !== "MUNICÍPIO") {
+                    if (ev.status === 'CONFIRMADO') {
+                        piorCenario = "INDISPONIVEL";
+                        msgFinal = `❌ INDISPONÍVEL. SHOW CONFIRMADO NESTE DIA EM OUTRO ESTADO (${evUF}).`;
+                        colorFinal = "#ef4444";
+                        break; 
+                    } else {
+                        piorCenario = "ESPERA";
+                        msgFinal = `⚠️ SHOW EM NEGOCIAÇÃO EM OUTRO ESTADO (${evUF}) NO MESMO DIA. ENVIE PARA FILA DE ESPERA.`;
+                        colorFinal = "#f59e0b";
+                    }
+                    continue;
+                }
+
+                let temMargem = false;
+                if (ev.horaInicio) {
+                    let [eh, em] = ev.horaInicio.split(':').map(Number); let eI = (eh * 60) + em;
+                    let eF = ev.horaTermino ? (ev.horaTermino.split(':')[0]*60 + ev.horaTermino.split(':')[1]*1) : eI + 120; 
+                    if (novoIniMin - eF >= 90 || eI - novoFimMin >= 90) temMargem = true;
+                }
+
+                if (evCidade === cidadeInput || !evCidade) { 
+                    if (temMargem) {
+                        if (piorCenario !== "INDISPONIVEL" && piorCenario !== "ESPERA") {
+                            piorCenario = "LIVRE_COM_MARGEM";
+                            msgFinal = `✅ JÁ EXISTE UM EVENTO NESTA DATA, MAS TEMOS MARGEM DE LOGÍSTICA PARA ATENDER VOCÊ!`;
+                            colorFinal = "#3b82f6";
+                        }
+                    } else { 
+                        if (ev.status === 'CONFIRMADO') {
+                            piorCenario = "INDISPONIVEL";
+                            msgFinal = `❌ INDISPONÍVEL. JÁ TEMOS UM EVENTO CONFIRMADO NESTE HORÁRIO.`;
+                            colorFinal = "#ef4444";
+                            break;
+                        } else {
+                            piorCenario = "ESPERA";
+                            msgFinal = `⚠️ ESTA DATA POSSUI UMA PRÉ-RESERVA EM ANDAMENTO NESTE HORÁRIO. ENVIE OS DADOS PARA FILA DE ESPERA.`;
+                            colorFinal = "#f59e0b";
+                        }
+                    }
+                } else { 
+                    if (temMargem) {
+                        if (piorCenario !== "INDISPONIVEL" && piorCenario !== "ESPERA") {
+                            piorCenario = "AVALIAR_LOGISTICA";
+                            let statusNome = ev.status === 'PRE_RESERVA' ? 'LEAD' : ev.status;
+                            msgFinal = `⚠️ AVALIAR LOGISTICA - DATA EM ${statusNome} EM ${evCidade} - ${evUF || estadoInput}. ✅ JÁ EXISTE UM EVENTO NESTA DATA, MAS TEMOS MARGEM DE LOGÍSTICA PARA ATENDER VOCÊ!`;
+                            colorFinal = "#3b82f6";
+                        }
+                    } else { 
+                        if (ev.status === 'CONFIRMADO') {
+                            piorCenario = "INDISPONIVEL";
+                            msgFinal = `❌ INDISPONÍVEL. EVENTO CONFIRMADO EM ${evCidade} COM TEMPO DE DESLOCAMENTO INSUFICIENTE.`;
+                            colorFinal = "#ef4444";
+                            break;
+                        } else {
+                            piorCenario = "ESPERA";
+                            msgFinal = `⚠️ PRÉ-RESERVA EM ${evCidade} SEM MARGEM DE DESLOCAMENTO. ENVIE PARA FILA DE ESPERA.`;
+                            colorFinal = "#f59e0b";
+                        }
+                    }
+                }
+            }
+
+            setStatusStep(msgFinal, null, colorFinal);
+
+            if (piorCenario === "INDISPONIVEL" || piorCenario === "ESPERA") window.estadoAgenda = "OCUPADO";
+            else window.estadoAgenda = "LIVRE";
+        };
+
+        document.getElementById('formCliente').onsubmit = async (e) => {
+            e.preventDefault(); document.getElementById('btn-spinner').classList.remove('hidden');
+            const docVal = document.getElementById('documento').value;
+            const dataParts = document.getElementById('data_evento').value.split('-');
+            const cidSelect = document.getElementById('cidade');
+
+            const dados = { 
+                cliente: document.getElementById('nome_razao').value.toUpperCase(), 
+                documento: document.getElementById('documento').value, 
+                documentoLimpo: docVal.replace(/\D/g, ""),
+                whatsapp: document.getElementById('whatsapp').value, 
+                email: document.getElementById('email').value, 
+                dataStr: `${dataParts[2]}-${dataParts[1]}-${dataParts[0]}`,
+                horaInicio: document.getElementById('hora_inicio').value, 
+                duracao: document.getElementById('duracao').value,
+                cidade: (cidSelect.options[cidSelect.selectedIndex]?.value || "").toUpperCase(), 
+                uf: document.getElementById('estado').value,
+                local: document.getElementById('local_nome').value.toUpperCase(), 
+                tipo: document.getElementById('tipo_evento').value,
+                convidados: document.getElementById('convidados').value,
+                status: "PRE_RESERVA", 
+                statusAgenda: window.estadoAgenda, 
+                concorrentes: window.concorrentesEncontrados,
+                valor: 0, 
+                valorPago: 0, 
+                statusPgto: "PENDENTE", 
+                criadoEm: serverTimestamp() 
+            };
+            try {
+                // Envia para o Firebase
+                const docRef = await addDoc(collection(db, "pedidos"), dados);
+                
+                // Envia para a Google Agenda (criará a faixa amarela do Pré-reserva com o ID do documento atrelado se você quiser, mas aqui estou mandando os mesmos dados base)
+                fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify({ acao: "CRIAR_PRE_RESERVA_AGENDA", ...dados }) })
+                .then(res => res.json())
+                .then(apiRes => {
+                    // Após criar na agenda, guarda o ID da agenda lá no Firebase
+                    if(apiRes.success && apiRes.eventId) {
+                        updateDoc(doc(db, "pedidos", docRef.id), { agendaId: apiRes.eventId });
+                    }
+                });
+                
+                document.getElementById('formCliente').classList.add('hidden'); document.getElementById('sucesso-cliente').classList.remove('hidden');
+            } catch (err) { Swal.fire("Erro", "Falha ao enviar a solicitação.", "error"); } 
+            finally { document.getElementById('btn-spinner').classList.add('hidden'); }
+        };
+    </script>
+</body>
+</html>
