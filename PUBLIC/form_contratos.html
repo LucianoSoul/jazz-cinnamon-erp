@@ -143,7 +143,7 @@
                 <!-- BOTÃO NF LIBERADO PARA ESCOLHA -->
                 <div class="flex items-center justify-between border-t border-gray-100 pt-4">
                     <div>
-                        <span class="text-xs font-bold text-gray-700">Emissão de Nota Fiscal</span>
+                        <span class="text-xs font-bold text-gray-700">Emissão de Nota Fiscal (+12%)</span>
                     </div>
                     <div class="flex items-center gap-2">
                         <input type="checkbox" id="ct_nf" class="w-5 h-5 accent-[#c5a059] cursor-pointer" onchange="window.atualizarValorFinal()">
@@ -152,7 +152,10 @@
                 </div>
 
                 <div class="text-center pt-6">
-                    <p class="text-[9px] uppercase font-bold text-gray-400">Valor Final Acordado</p>
+                    <p class="text-[9px] uppercase font-bold text-gray-400 mb-1">
+                        Valor Base do Evento: <span id="ct_valor_base_display" class="text-gray-600">R$ 0,00</span>
+                    </p>
+                    <p class="text-[9px] uppercase font-bold text-[#c5a059]">Valor Final Acordado</p>
                     <input type="text" id="ct_valor_final" class="text-3xl font-bold text-center w-full outline-none bg-transparent text-green-600" readonly value="R$ 0,00">
                 </div>
             </div>
@@ -255,11 +258,16 @@
                     window.pedidoAtualId = snap.id;
                     window.pedidoAtualDados = pedidoEncontrado;
 
+                    // LÓGICA DE VALOR BASE (Desconta a NF se ela estava marcada no banco original, evitando dízimas JavaScript)
                     let isNfOriginal = (pedidoEncontrado.temNf === "SIM");
                     let valorNumTotal = window.parseMoeda(pedidoEncontrado.valor);
-                    window.valorBase = isNfOriginal ? (valorNumTotal / 1.12) : valorNumTotal;
+                    window.valorBase = parseFloat((isNfOriginal ? (valorNumTotal / 1.12) : valorNumTotal).toFixed(2));
                     
                     document.getElementById('ct_valor_base').value = window.valorBase;
+                    
+                    // Exibe o Valor Base para o Cliente (Transparência)
+                    document.getElementById('ct_valor_base_display').innerText = window.valorBase.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+
                     document.getElementById('ct_nf').checked = isNfOriginal;
                     document.getElementById('label_nf').innerText = isNfOriginal ? "SIM" : "NÃO";
                     document.getElementById('ct_valor_final').value = valorNumTotal.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
@@ -346,11 +354,13 @@
             } catch (error) { console.warn("Erro ao buscar CEP", error); }
         };
 
+        // FUNÇÃO DE ATUALIZAÇÃO RECALCULA SEMPRE PELO VALOR BASE LIMPO (+12%)
         window.atualizarValorFinal = () => {
             const comNota = document.getElementById('ct_nf').checked;
             document.getElementById('label_nf').innerText = comNota ? "SIM" : "NÃO";
-            let final = window.valorBase;
-            if (comNota) final = final * 1.12;
+            
+            let final = comNota ? (window.valorBase * 1.12) : window.valorBase;
+            
             document.getElementById('ct_valor_final').value = final.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
         };
 
@@ -362,7 +372,7 @@
             document.getElementById('btn-spinner').classList.remove('hidden');
             
             const isNf = document.getElementById('ct_nf').checked;
-            let finalValue = window.valorBase * (isNf ? 1.12 : 1);
+            let finalValue = parseFloat((window.valorBase * (isNf ? 1.12 : 1)).toFixed(2));
 
             const dadosContrato = {
                 nome_contratante_formal: document.getElementById('ct_nome_formal').value.toUpperCase(),
