@@ -258,10 +258,21 @@
                     window.pedidoAtualId = snap.id;
                     window.pedidoAtualDados = pedidoEncontrado;
 
-                    // LÓGICA DE VALOR BASE (Desconta a NF se ela estava marcada no banco original, evitando dízimas JavaScript)
-                    let isNfOriginal = (pedidoEncontrado.temNf === "SIM");
+                    // LÓGICA DE VALOR BASE EXTREMAMENTE ROBUSTA
+                    // Verifica "SIM" na raiz ou dentro dos dadosContrato herdados
+                    let isNfOriginal = (
+                        String(pedidoEncontrado.temNf || '').toUpperCase().trim() === "SIM" || 
+                        (pedidoEncontrado.dadosContrato && String(pedidoEncontrado.dadosContrato.tem_nf || '').toUpperCase().trim() === "SIM")
+                    );
                     let valorNumTotal = window.parseMoeda(pedidoEncontrado.valor);
-                    window.valorBase = parseFloat((isNfOriginal ? (valorNumTotal / 1.12) : valorNumTotal).toFixed(2));
+                    
+                    // Prioriza o campo 'valorBase' caso ele exista no banco, 
+                    // senão faz a reversão do cálculo em cima do Total com segurança
+                    if (pedidoEncontrado.valorBase !== undefined && pedidoEncontrado.valorBase !== null) {
+                        window.valorBase = window.parseMoeda(pedidoEncontrado.valorBase);
+                    } else {
+                        window.valorBase = parseFloat((isNfOriginal ? (valorNumTotal / 1.12) : valorNumTotal).toFixed(2));
+                    }
                     
                     document.getElementById('ct_valor_base').value = window.valorBase;
                     
@@ -270,7 +281,9 @@
 
                     document.getElementById('ct_nf').checked = isNfOriginal;
                     document.getElementById('label_nf').innerText = isNfOriginal ? "SIM" : "NÃO";
-                    document.getElementById('ct_valor_final').value = valorNumTotal.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+                    
+                    // Mostra o valor final atualizado (Base + 12% se for o caso)
+                    document.getElementById('ct_valor_final').value = (isNfOriginal ? (window.valorBase * 1.12) : window.valorBase).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
 
                     let dataFormatada = pedidoEncontrado.dataStr;
                     if(dataFormatada && dataFormatada.includes('-')) dataFormatada = dataFormatada.split('-').reverse().join('/');

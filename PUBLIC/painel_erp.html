@@ -305,6 +305,7 @@
         window.abaAtual = 'PRE_RESERVA';
         window.animacaoInicialRodando = false;
         window.dadosJaCarregados = false;
+        window.timeoutKpiAno = null; // Adicionado para gerenciar o timer dos KPIs
 
         // UTILITÁRIOS
         window.safeNum = (val) => val ? (typeof val === 'number' ? val : parseFloat(String(val).replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]+/g, "")) || 0) : 0;
@@ -372,8 +373,11 @@
             if(window.animacaoInicialRodando) return;
             const mes = document.getElementById('filtroMes').value; 
             const ano = document.getElementById('filtroAno').value; 
+            
             const sMes = { pre: {qtd:0}, reserva: {valor:0}, conf: {valor:0} };
+            const sAno = { pre: {qtd:0}, reserva: {valor:0}, conf: {valor:0} };
             const notificacoes = [];
+            
             window.dadosGlobais.forEach(ev => {
                 const d = window.extrairAnoMes(ev.dataStr);
                 if (!ev.notificacaoOculta) {
@@ -383,24 +387,45 @@
                     }
                     if (ev.status === 'CONFIRMADO' && ev.valorPagoNum < ev.valorNum) notificacoes.push({ ...ev, type: 'COBRANCA' });
                 }
-                if (d.ano === ano && (mes === 'todos' || parseInt(d.mes) === parseInt(mes))) {
-                    if(ev.status === 'PRE_RESERVA') sMes.pre.qtd++;
-                    if(ev.status === 'RESERVA') sMes.reserva.valor += ev.valorNum;
-                    if(ev.status === 'CONFIRMADO') sMes.conf.valor += ev.valorNum;
+                
+                if (d.ano === ano) {
+                    // Contabiliza para o Ano
+                    if(ev.status === 'PRE_RESERVA') sAno.pre.qtd++;
+                    if(ev.status === 'RESERVA') sAno.reserva.valor += ev.valorNum;
+                    if(ev.status === 'CONFIRMADO') sAno.conf.valor += ev.valorNum;
+
+                    // Contabiliza para o Mês atual do filtro
+                    if (mes === 'todos' || parseInt(d.mes) === parseInt(mes)) {
+                        if(ev.status === 'PRE_RESERVA') sMes.pre.qtd++;
+                        if(ev.status === 'RESERVA') sMes.reserva.valor += ev.valorNum;
+                        if(ev.status === 'CONFIRMADO') sMes.conf.valor += ev.valorNum;
+                    }
                 }
             });
             window.notificacoesGlobais = notificacoes;
-            renderPainelKpis(sMes);
+            
+            clearTimeout(window.timeoutKpiAno);
+            
+            if (mes !== 'todos') {
+                renderPainelKpis(sAno, true); // Renderiza totais do Ano primeiro (com animação)
+                window.timeoutKpiAno = setTimeout(() => {
+                    renderPainelKpis(sMes, false); // Volta pros totais do Mês após 3.2s
+                }, 3200);
+            } else {
+                renderPainelKpis(sMes, false); // Se já está em "todos", só exibe normal
+            }
         };
 
-        function renderPainelKpis(s) {
+        function renderPainelKpis(s, isAno = false) {
+            const sufixo = isAno ? ' (ANO)' : '';
+            const cssAnim = isAno ? ' kpi-show' : '';
             const items = [
-                { id: 'PRE_RESERVA', label: 'LEADS', val: s.pre.qtd, icon: 'user', color: 'blue' },
-                { id: 'RESERVA', label: 'RESERVAS', val: window.fmtMoeda(s.reserva.valor), icon: 'briefcase', color: 'green' },
-                { id: 'CONFIRMADO', label: 'CONFIRMADOS', val: window.fmtMoeda(s.conf.valor), icon: 'check-circle', color: 'purple' }
+                { id: 'PRE_RESERVA', label: 'LEADS' + sufixo, val: s.pre.qtd, icon: 'user', color: 'blue' },
+                { id: 'RESERVA', label: 'RESERVAS' + sufixo, val: window.fmtMoeda(s.reserva.valor), icon: 'briefcase', color: 'green' },
+                { id: 'CONFIRMADO', label: 'CONFIRMADOS' + sufixo, val: window.fmtMoeda(s.conf.valor), icon: 'check-circle', color: 'purple' }
             ];
             document.getElementById('kpi-container').innerHTML = items.map(it => `
-                <div onclick="window.clicarKpi('${it.id}')" class="bg-[#111318] p-3 rounded-2xl border ${window.abaAtual === it.id ? `border-${it.color}-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]` : `border-${it.color}-900/50`} cursor-pointer text-center flex flex-col items-center justify-center transition active:scale-95">
+                <div onclick="window.clicarKpi('${it.id}')" class="bg-[#111318] p-3 rounded-2xl border ${window.abaAtual === it.id ? `border-${it.color}-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]` : `border-${it.color}-900/50`} cursor-pointer text-center flex flex-col items-center justify-center transition active:scale-95${cssAnim}">
                     <i data-lucide="${it.icon}" class="w-3.5 h-3.5 text-${it.color}-400 mb-1.5"></i>
                     <div class="text-[10px] sm:text-xs font-black text-white leading-none">${it.val}</div>
                     <div class="text-[8px] text-gray-500 uppercase font-black mt-1.5 tracking-widest">${it.label}</div>
@@ -436,7 +461,7 @@
                 if (ev.status === 'PRE_RESERVA') {
                     msgWpp = `Olá ${ev.cliente}! Eu sou o Luciano da Jazz Cinnamon.\n\nAcabei de receber em nosso sistema sua solicitação de orçamento para o dia *${dataPt}* em *${ev.cidade || 'LOCAL'} - ${ev.uf || 'UF'}*.\n\nVai chegar direto no seu e-mail. Quer receber por aqui também e continuamos conversando?`;
                 } else if (ev.status === 'RESERVA') {
-                    msgWpp = `Olá ${ev.cliente}, tudo bem?\nO seu orçamento foi aprovado! Para darmos andamento à emissão do seu contrato, por favor preencha os dados no link seguro abaixo:\n\nhttps://jazz-cinnamon-erp.web.app/form_contratos?id=${ev.id}`;
+                    msgWpp = `Olá ${ev.cliente}, tudo bem?\nO seu orçamento foi aprovado! Para darmos andamento à emissão do seu contrato, por favor preencha os dados no link seguro abaixo:\n\nhttps://jazz-cinnamon-erp.web.app/form_contratos?id=${String(ev.id).trim()}&ref=ok`;
                 } else {
                     msgWpp = `Oi ${ev.cliente}, tudo bem?\n\nPodemos ajustar os detalhes do seu evento do dia ${dataPt} (${diaSem})?`;
                 }
@@ -446,6 +471,16 @@
                 let barColor = 'bg-[#3b82f6]'; let statusTxt = 'PENDENTE'; let colorTxt = 'text-blue-400';
                 if(percent >= 100) { barColor = 'bg-[#10b981]'; statusTxt = 'QUITADO'; colorTxt = 'text-[#10b981]'; }
                 else if(percent > 0) { barColor = 'bg-orange-500'; statusTxt = 'SINAL PAGO'; colorTxt = 'text-orange-400'; }
+
+                // Lógica de ícone e cor da pastinha baseada nos anexos armazenados no Firebase
+                const anexos = window.compilarAnexos(ev);
+                const temAnexo = anexos.length > 0;
+                const btnPastinhaHTML = `
+                    <button onclick="window.abrirListaAnexos('${ev.id}')" class="w-9 h-9 rounded-lg border ${temAnexo ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[#2a2e39] text-gray-500 hover:bg-gray-800'} flex items-center justify-center transition relative" title="${temAnexo ? anexos.length + ' arquivo(s)' : 'Nenhum arquivo'}">
+                        <i data-lucide="${temAnexo ? 'folder-open' : 'folder'}" class="w-4 h-4"></i>
+                        ${temAnexo ? `<span class="absolute -top-1.5 -right-1.5 bg-[#d4af37] text-black text-[9px] font-black w-4 h-4 flex items-center justify-center rounded-full shadow-md">${anexos.length}</span>` : ''}
+                    </button>
+                `;
 
                 html += `
                 <div class="relative overflow-hidden mb-5 rounded-2xl shadow-2xl card-animado">
@@ -477,6 +512,7 @@
                                     <option value="CONFIRMADO" ${status === 'CONFIRMADO' ? 'selected' : ''}>✅ CONFIRM</option>
                                 </select>
                             </div>
+                            ${btnPastinhaHTML}
                             <a href="${linkWhats}" target="_blank" class="w-9 h-9 rounded-lg border border-[#2a2e39] flex items-center justify-center text-green-500 hover:bg-green-900/20 transition"><i data-lucide="message-circle" class="w-4 h-4"></i></a>
                             <button onclick="window.abrirEdicaoUnificada('${ev.id}')" class="w-9 h-9 rounded bg-[#d4af37] text-black flex items-center justify-center shadow-lg hover:bg-[#b5952f] transition"><i data-lucide="edit" class="w-4 h-4"></i></button>
                             <button onclick="window.reprovarEvento('${ev.id}')" class="w-9 h-9 rounded border border-[#2a2e39] flex items-center justify-center text-red-400 hover:border-red-900 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
