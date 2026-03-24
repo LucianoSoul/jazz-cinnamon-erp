@@ -639,14 +639,20 @@
                 const valorTotal = isNf ? (valorBase * 1.12) : valorBase;
                 const docLimpo = document.getElementById('uni-doc').value.replace(/\D/g, "");
 
+                // CÁLCULO INTELIGENTE DO HORÁRIO FINAL (Para BD e Agenda)
+                const horaInicioStr = document.getElementById('uni-hora').value;
+                const duracaoStr = document.getElementById('uni-duracao').value;
+                const horaTerminoCalc = window.horaTerminoCalculado(horaInicioStr, duracaoStr);
+
                 // EVOLUÇÃO: Salvamento limpo, direto na raiz do documento
                 const payload = { 
                     cliente: document.getElementById('uni-cliente-input').value.toUpperCase(), 
                     documento: document.getElementById('uni-doc').value,
                     documentoLimpo: docLimpo,
                     dataStr: document.getElementById('uni-data').value, 
-                    horaInicio: document.getElementById('uni-hora').value,
-                    duracao: document.getElementById('uni-duracao').value,
+                    horaInicio: horaInicioStr,
+                    duracao: duracaoStr,
+                    horaTermino: horaTerminoCalc, // <- Adicionado e Calculado!
                     temNf: isNf ? "SIM" : "NÃO",
                     valor: valorTotal,
                     valorPago: parseFloat(document.getElementById('uni-valor-pago').value || 0),
@@ -661,6 +667,32 @@
 
                 Swal.fire({title:'A guardar...', didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff'});
                 await updateDoc(doc(db, "pedidos", id), payload); 
+                
+                // SINCRONIZAÇÃO EM TEMPO REAL COM A AGENDA
+                const idAgenda = document.getElementById('uni-agenda-id').value;
+                if(idAgenda) {
+                    try {
+                        const resUpdate = await fetch(URL_BACKEND, { 
+                            method: 'POST', 
+                            body: JSON.stringify({ 
+                                acao: "ATUALIZAR_DADOS_AGENDA", 
+                                agendaId: idAgenda, 
+                                dataStr: payload.dataStr, 
+                                horaInicio: payload.horaInicio, 
+                                horaTermino: payload.horaTermino, // Mandando para desenhar na agenda
+                                duracao: payload.duracao,
+                                cliente: payload.cliente,
+                                tipo: document.getElementById('uni-tipo').value,
+                                status: window.dadosGlobais.find(e => e.id === id)?.status || 'PRE_RESERVA' 
+                            }) 
+                        }).then(r=>r.json());
+                        
+                        if(resUpdate.newEventId) {
+                            await updateDoc(doc(db, "pedidos", id), { agendaId: resUpdate.newEventId });
+                        }
+                    } catch (e) { console.error('Erro silencioso na Agenda', e); }
+                }
+
                 window.fecharModalUnificado(); 
                 Swal.fire({icon:'success', title:'Guardado!', timer:1500, showConfirmButton:false, background:'#1a1d24'}); 
             } catch(e) { 
