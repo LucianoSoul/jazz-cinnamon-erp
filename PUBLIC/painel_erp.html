@@ -16,8 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- Adicionado: Motor de Geração de PDF em Background -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
     <style>
         body { font-family: 'Montserrat', sans-serif; background: #0f1115; color: #e0e0e0; -webkit-tap-highlight-color: transparent; }
@@ -185,7 +184,6 @@
                 <input type="hidden" id="uni-agenda-id">
                 <input type="hidden" id="uni-tipo">
                 <input type="hidden" id="uni-cliente-hidden">
-                <input type="hidden" id="uni-valor-base">
 
                 <div id="tab-editar" class="space-y-6 block">
                     <div>
@@ -198,31 +196,36 @@
                             <div><label class="text-[9px] text-gray-500 uppercase">CPF/CNPJ</label><input type="text" id="uni-doc" class="input-erp w-full p-2 text-xs" oninput="window.formatarCpfCnpj(this)"></div>
                             <div><label class="text-[9px] text-gray-500 uppercase">Data</label><input type="date" id="uni-data" class="input-erp w-full p-2 text-xs text-[#d4af37] font-bold"></div>
                         </div>
-                        <div class="grid grid-cols-3 gap-3 mb-3">
-                            <div><label class="text-[9px] text-gray-500 uppercase">Hora de Início</label><input type="time" id="uni-hora" class="input-erp w-full p-2 text-xs text-white font-bold" oninput="window.atualizarExibicaoHoraTermino()"></div>
+                        <div class="grid grid-cols-3 gap-3 mb-3 relative items-end">
                             <div>
-                                <label class="text-[9px] text-gray-500 uppercase">Duração</label>
+                                <label class="text-[9px] text-gray-500 uppercase mb-1 block">Hora de Início</label>
+                                <input type="time" id="uni-hora" class="input-erp w-full p-2 text-xs text-white font-bold" oninput="window.atualizarExibicaoHoraTermino()">
+                            </div>
+                            <div class="relative">
+                                <label class="text-[9px] text-gray-500 uppercase mb-1 block">Duração</label>
                                 <select id="uni-duracao" class="input-erp w-full p-2 text-xs font-bold text-white" onchange="window.atualizarExibicaoHoraTermino()">
                                     <option value="1:00">1h</option><option value="1:30">1.5h</option><option value="2:00">2h</option><option value="2:30">2.5h</option><option value="3:00">3h</option>
                                 </select>
-                                <span id="uni-hora-termino-display" class="text-[8px] text-[#d4af37] mt-1 block font-bold tracking-widest">TÉRMINO: --:--</span>
+                                <span id="uni-hora-termino-display" class="text-[8px] text-[#d4af37] block font-bold tracking-widest absolute -bottom-4 left-0">TÉRMINO: --:--</span>
                             </div>
                             <div>
-                                <label class="text-[9px] text-gray-500 uppercase">Valor Base S/ NF</label>
+                                <label class="text-[9px] text-gray-500 uppercase mb-1 block">Valor Orçamento</label>
                                 <input type="text" id="uni-valor-input" class="input-erp w-full p-2 text-xs font-bold text-white border-[#d4af37]" oninput="window.formatarMoedaParaInput(this); window.recalcularTotalUnificado()">
                             </div>
                         </div>
                     </div>
 
                     <div>
-                        <h3 class="text-[10px] uppercase font-bold text-gray-400 border-b border-gray-700 pb-1 mb-3"><i data-lucide="dollar-sign" class="w-3 h-3 inline mr-1"></i> Fluxo de Pagamento</h3>
+                        <h3 class="text-[10px] uppercase font-bold text-gray-400 border-b border-gray-700 pb-1 mb-3 mt-5"><i data-lucide="dollar-sign" class="w-3 h-3 inline mr-1"></i> Fluxo de Pagamento</h3>
                         <div class="flex items-center justify-between mb-4 bg-purple-900/20 p-3 rounded border border-purple-900/50">
                             <div>
-                                <span class="text-xs text-purple-300 font-bold uppercase block">Emitir Nota Fiscal (+12%)</span>
+                                <span class="text-xs text-purple-300 font-bold uppercase block">Nota Fiscal (12%)</span>
                             </div>
-                            <label class="inline-flex items-center cursor-pointer">
-                                <input type="checkbox" id="uni-temnf" onchange="window.recalcularTotalUnificado()" class="w-6 h-6 accent-[#d4af37]">
-                            </label>
+                            <select id="uni-temnf" onchange="window.recalcularTotalUnificado()" class="bg-[#111318] border border-purple-900/50 text-purple-300 text-[9px] font-bold uppercase rounded p-1.5 outline-none cursor-pointer w-max">
+                                <option value="NÃO">Sem Nota</option>
+                                <option value="SIM">Cliente Paga (+12%)</option>
+                                <option value="ABSORVIDA">Banda Absorve</option>
+                            </select>
                         </div>
                         
                         <button type="button" onclick="window.enviarLinkNf()" id="btn-link-nf" class="w-full mb-4 bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-500 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition flex justify-center items-center gap-2 hidden">
@@ -266,12 +269,12 @@
                         </div>
                         <div><label class="text-[8px] text-gray-500 uppercase">Custo Total da VAN</label><input type="number" id="uni-custo-van" oninput="window.recalcularTotalUnificado()" class="input-erp w-full p-1.5 text-xs" placeholder="0.00" step="0.01"></div>
                     </div>
-                    <div id="uni-split-results" class="bg-[#111318] border border-[#2a2e39] rounded-lg p-3 sm:p-4 space-y-2 text-[10px] font-bold">
+                    <div id="uni-split-results" class="bg-[#111318] border border-[#2a2e39] rounded-lg p-3 sm:p-4 text-[10px]">
                         <!-- Resultados do Split injetados via JS -->
                     </div>
                     
                     <button onclick="window.gerarExtratoBanda()" type="button" class="w-full mt-4 bg-gray-800 hover:bg-gray-700 text-gray-300 py-3 rounded-lg text-[10px] font-bold uppercase transition flex justify-center items-center gap-2 border border-gray-700 shadow">
-                        <i data-lucide="receipt" class="w-4 h-4 text-[#d4af37]"></i> Gerar Extrato da Banda (PDF)
+                        <i data-lucide="image" class="w-4 h-4 text-[#d4af37]"></i> Gerar Extrato da Banda (JPG)
                     </button>
                 </div>
             </div>
@@ -305,7 +308,7 @@
         window.abaAtual = 'PRE_RESERVA';
         window.animacaoInicialRodando = false;
         window.dadosJaCarregados = false;
-        window.timeoutKpiAno = null; // Adicionado para gerenciar o timer dos KPIs
+        window.timeoutKpiAno = null;
 
         // UTILITÁRIOS
         window.safeNum = (val) => val ? (typeof val === 'number' ? val : parseFloat(String(val).replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]+/g, "")) || 0) : 0;
@@ -389,12 +392,10 @@
                 }
                 
                 if (d.ano === ano) {
-                    // Contabiliza para o Ano
                     if(ev.status === 'PRE_RESERVA') sAno.pre.qtd++;
                     if(ev.status === 'RESERVA') sAno.reserva.valor += ev.valorNum;
                     if(ev.status === 'CONFIRMADO') sAno.conf.valor += ev.valorNum;
 
-                    // Contabiliza para o Mês atual do filtro
                     if (mes === 'todos' || parseInt(d.mes) === parseInt(mes)) {
                         if(ev.status === 'PRE_RESERVA') sMes.pre.qtd++;
                         if(ev.status === 'RESERVA') sMes.reserva.valor += ev.valorNum;
@@ -407,12 +408,12 @@
             clearTimeout(window.timeoutKpiAno);
             
             if (mes !== 'todos') {
-                renderPainelKpis(sAno, true); // Renderiza totais do Ano primeiro (com animação)
+                renderPainelKpis(sAno, true); 
                 window.timeoutKpiAno = setTimeout(() => {
-                    renderPainelKpis(sMes, false); // Volta pros totais do Mês após 3.2s
+                    renderPainelKpis(sMes, false); 
                 }, 3200);
             } else {
-                renderPainelKpis(sMes, false); // Se já está em "todos", só exibe normal
+                renderPainelKpis(sMes, false); 
             }
         };
 
@@ -441,7 +442,6 @@
             const ano = document.getElementById('filtroAno').value; 
             const filtrados = window.dadosGlobais.filter(ev => ev.status === status && window.extrairAnoMes(ev.dataStr).ano === ano && (mes === 'todos' || parseInt(window.extrairAnoMes(ev.dataStr).mes) === parseInt(mes)));
             
-            // ORDENAR POR DATA (CRESCENTE)
             filtrados.sort((a, b) => {
                 const dA = window.extrairAnoMes(a.dataStr);
                 const dB = window.extrairAnoMes(b.dataStr);
@@ -472,7 +472,6 @@
                 if(percent >= 100) { barColor = 'bg-[#10b981]'; statusTxt = 'QUITADO'; colorTxt = 'text-[#10b981]'; }
                 else if(percent > 0) { barColor = 'bg-orange-500'; statusTxt = 'SINAL PAGO'; colorTxt = 'text-orange-400'; }
 
-                // Lógica de ícone e cor da pastinha baseada nos anexos armazenados no Firebase
                 const anexos = window.compilarAnexos(ev);
                 const temAnexo = anexos.length > 0;
                 const btnPastinhaHTML = `
@@ -571,18 +570,18 @@
 
                 if(window.atualizarExibicaoHoraTermino) window.atualizarExibicaoHoraTermino();
 
-                let isNf = (ev.temNf === "SIM"); 
-                let valorNumerico = ev.valorNum;
-                let valorBaseSugerido = isNf ? (valorNumerico / 1.12) : valorNumerico;
+                let opNf = ev.temNf || "NÃO"; 
+                let valorTotalBD = ev.valorNum || 0;
+                let valorOrcamentoBase = (opNf === "SIM") ? (valorTotalBD / 1.12) : valorTotalBD;
                 
-                if(document.getElementById('uni-temnf')) document.getElementById('uni-temnf').checked = isNf;
-                if(document.getElementById('uni-valor-base')) document.getElementById('uni-valor-base').value = valorBaseSugerido;
-                if(document.getElementById('uni-valor-input')) document.getElementById('uni-valor-input').value = window.fmtMoeda_n(valorBaseSugerido);
+                if(document.getElementById('uni-temnf')) document.getElementById('uni-temnf').value = opNf;
+                // Exibe no input O VALOR ORÇAMENTO BASE
+                if(document.getElementById('uni-valor-input')) document.getElementById('uni-valor-input').value = window.fmtMoeda_n(valorOrcamentoBase);
                 
                 if(document.getElementById('uni-status-pgto')) document.getElementById('uni-status-pgto').value = ev.statusPgto || 'PENDENTE';
                 if(document.getElementById('uni-valor-pago')) document.getElementById('uni-valor-pago').value = window.safeNum(ev.valorPagoNum) || '';
 
-                // Campos diretos do banco (evolução Logística)
+                // Campos diretos do banco
                 if(document.getElementById('uni-roadie')) document.getElementById('uni-roadie').checked = (ev.roadie === "SIM");
                 if(document.getElementById('uni-gas-luc')) document.getElementById('uni-gas-luc').value = ev.gasL !== undefined ? ev.gasL : "";
                 if(document.getElementById('uni-gas-ser')) document.getElementById('uni-gas-ser').value = ev.gasS !== undefined ? ev.gasS : "";
@@ -590,7 +589,7 @@
                 if(document.getElementById('uni-gas-lev')) document.getElementById('uni-gas-lev').value = ev.gasLevi !== undefined ? ev.gasLevi : "";
                 if(document.getElementById('uni-custo-van')) document.getElementById('uni-custo-van').value = ev.van !== undefined ? ev.van : "";
 
-                if(window.renderListaAnexosModal) window.renderListaAnexosModal(window.compilarAnexos(ev));
+                if(window.renderListaAnexosModal) window.renderListaAnexosModal(id, window.compilarAnexos(ev));
 
                 if(window.recalcularTotalUnificado) window.recalcularTotalUnificado();
                 
@@ -621,17 +620,16 @@
 
         window.recalcularTotalUnificado = () => {
             try {
-                const elTemNf = document.getElementById('uni-temnf');
-                const isNf = elTemNf ? elTemNf.checked : false;
-                const inputValStr = document.getElementById('uni-valor-input')?.value || "0";
-                let valorBase = window.parseMoeda(inputValStr);
-                let valorTotal = isNf ? (valorBase * 1.12) : valorBase;
+                let valorOrcamento = window.parseMoeda(document.getElementById('uni-valor-input')?.value || "0");
+                let opNf = document.getElementById('uni-temnf')?.value || "NÃO";
+                
+                // Cliente paga o Valor Total = Orçamento + 12% (Apenas se for repassada)
+                let valorTotal = (opNf === "SIM") ? (valorOrcamento * 1.12) : valorOrcamento;
                 
                 const elDisplay = document.getElementById('uni-valor-display');
                 if(elDisplay) elDisplay.innerText = window.fmtMoeda_n(valorTotal);
 
                 let vPago = window.parseMoeda(document.getElementById('uni-valor-pago')?.value || 0);
-                
                 let vPagoRound = Math.round(vPago * 100);
                 let vTotalRound = Math.round(valorTotal * 100);
 
@@ -671,27 +669,93 @@
                         <div class="flex justify-between items-center mt-2 text-[9px] font-bold uppercase tracking-wider"><span class="text-gray-400">Pago: ${window.fmtMoeda(vPago)}</span><span class="${corFalta}">${txtFalta}</span></div>`;
                 }
 
-                // Lógica de Split da Banda
-                const gL = parseFloat(document.getElementById('uni-gas-luc')?.value || 0); 
-                const gS = parseFloat(document.getElementById('uni-gas-ser')?.value || 0);
-                const gC = parseFloat(document.getElementById('uni-gas-ces')?.value || 0); 
-                const gV = parseFloat(document.getElementById('uni-gas-lev')?.value || 0);
-                const van = parseFloat(document.getElementById('uni-custo-van')?.value || 0); 
-                const roadieCusto = document.getElementById('uni-roadie')?.checked ? 100 : 0;
+                // LÓGICA DE SPLIT DA BANDA
+                let imposto = (opNf !== "NÃO") ? (valorOrcamento * 0.12) : 0;
+                let roadieCusto = document.getElementById('uni-roadie')?.checked ? 100 : 0;
+                let gasL = parseFloat(document.getElementById('uni-gas-luc')?.value || 0);
+                let gasS = parseFloat(document.getElementById('uni-gas-ser')?.value || 0);
+                let gasC = parseFloat(document.getElementById('uni-gas-ces')?.value || 0);
+                let gasLevi = parseFloat(document.getElementById('uni-gas-lev')?.value || 0);
+                let van = parseFloat(document.getElementById('uni-custo-van')?.value || 0);
+
+                let despesasLogistica = roadieCusto + gasL + gasS + gasC + gasLevi + van;
+                let liquidoDivisivel = valorOrcamento - imposto - despesasLogistica;
                 
-                let imposto = isNf ? (valorBase * 0.12) : 0;
-                let despesasTotal = roadieCusto + gL + gC + gV + gS + imposto + van;
-                let liquido = valorTotal - despesasTotal;
-                let parteBase = liquido / 5; let prodIndiv = parteBase / 2;
+                let fundoProducao = liquidoDivisivel / 5;
+                let prodIndiv = fundoProducao / 2;
+
+                let cacheLuciano = fundoProducao + prodIndiv + gasL;
+                let cacheSerginho = fundoProducao + prodIndiv + gasS;
+                let cacheCesimbra = fundoProducao + roadieCusto + gasC;
+                let cacheLevi = fundoProducao + gasLevi;
 
                 const splitRes = document.getElementById('uni-split-results');
                 if(splitRes) {
                     splitRes.innerHTML = `
-                        <div class="flex justify-between text-[#d4af37]"><span>Luciano:</span><span>${window.fmtMoeda_n(parteBase + prodIndiv + gL)}</span></div>
-                        <div class="flex justify-between text-[#d4af37]"><span>Sergio:</span><span>${window.fmtMoeda_n(parteBase + prodIndiv + gS)}</span></div>
-                        <div class="flex justify-between text-white"><span>Cesimbra:</span><span>${window.fmtMoeda_n(parteBase + gC + roadieCusto)}</span></div>
-                        <div class="flex justify-between text-white"><span>Levi:</span><span>${window.fmtMoeda_n(parteBase + gV)}</span></div>
-                        <div class="flex justify-between pt-2 border-t border-gray-700 text-gray-500"><span>Fundo Produção:</span><span>${window.fmtMoeda_n(parteBase)}</span></div>
+                        <div class="border-b border-[#2a2e39] pb-2 mb-3">
+                            <h4 class="text-[10px] text-center text-gray-400 font-black uppercase tracking-widest mb-2">Distribuição de Cachês</h4>
+                            <div class="flex justify-between text-[11px] text-[#10b981] font-black">
+                                <span>Líquido Divisível</span>
+                                <span>${window.fmtMoeda_n(liquidoDivisivel)}</span>
+                            </div>
+                            <div class="flex justify-between text-[9px] text-gray-500 font-bold mt-1">
+                                <span>Fundo Produção</span>
+                                <span>${window.fmtMoeda_n(fundoProducao)}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-3">
+                            <!-- Luciano -->
+                            <div>
+                                <div class="flex justify-between text-[#d4af37] font-bold text-[11px]">
+                                    <span>Luciano</span>
+                                    <span>${window.fmtMoeda_n(cacheLuciano)}</span>
+                                </div>
+                                <div class="text-[9px] text-gray-500 font-medium leading-tight mt-1">
+                                    Base: ${window.fmtMoeda(fundoProducao)}<br>
+                                    Prod: ${window.fmtMoeda(prodIndiv)}
+                                    ${gasL > 0 ? `<br>Gas: ${window.fmtMoeda(gasL)}` : ''}
+                                </div>
+                            </div>
+
+                            <!-- Serginho -->
+                            <div>
+                                <div class="flex justify-between text-[#d4af37] font-bold text-[11px]">
+                                    <span>Serginho</span>
+                                    <span>${window.fmtMoeda_n(cacheSerginho)}</span>
+                                </div>
+                                <div class="text-[9px] text-gray-500 font-medium leading-tight mt-1">
+                                    Base: ${window.fmtMoeda(fundoProducao)}<br>
+                                    Prod: ${window.fmtMoeda(prodIndiv)}
+                                    ${gasS > 0 ? `<br>Gas: ${window.fmtMoeda(gasS)}` : ''}
+                                </div>
+                            </div>
+
+                            <!-- Cesimbra -->
+                            <div>
+                                <div class="flex justify-between text-white font-bold text-[11px]">
+                                    <span>Cesimbra</span>
+                                    <span>${window.fmtMoeda_n(cacheCesimbra)}</span>
+                                </div>
+                                <div class="text-[9px] text-gray-500 font-medium leading-tight mt-1">
+                                    Base: ${window.fmtMoeda(fundoProducao)}
+                                    ${roadieCusto > 0 ? `<br>Roadie: ${window.fmtMoeda(roadieCusto)}` : ''}
+                                    ${gasC > 0 ? `<br>Gas: ${window.fmtMoeda(gasC)}` : ''}
+                                </div>
+                            </div>
+
+                            <!-- Levi -->
+                            <div>
+                                <div class="flex justify-between text-white font-bold text-[11px]">
+                                    <span>Levi</span>
+                                    <span>${window.fmtMoeda_n(cacheLevi)}</span>
+                                </div>
+                                <div class="text-[9px] text-gray-500 font-medium leading-tight mt-1">
+                                    Base: ${window.fmtMoeda(fundoProducao)}
+                                    ${gasLevi > 0 ? `<br>Gas: ${window.fmtMoeda(gasLevi)}` : ''}
+                                </div>
+                            </div>
+                        </div>
                     `;
                 }
             } catch(e) { console.error("Erro no recálculo", e); }
@@ -717,18 +781,16 @@
         window.salvarUnificado = async (modoPdf) => { 
             try {
                 const id = document.getElementById('uni-id').value; 
-                const isNf = document.getElementById('uni-temnf').checked;
+                const opNf = document.getElementById('uni-temnf').value;
                 const inputValStr = document.getElementById('uni-valor-input').value;
-                const valorBase = window.parseMoeda(inputValStr);
-                const valorTotal = isNf ? (valorBase * 1.12) : valorBase;
+                const valorOrcamento = window.parseMoeda(inputValStr);
+                const valorTotal = (opNf === "SIM") ? (valorOrcamento * 1.12) : valorOrcamento;
                 const docLimpo = document.getElementById('uni-doc').value.replace(/\D/g, "");
 
-                // CÁLCULO INTELIGENTE DO HORÁRIO FINAL (Para BD e Agenda)
                 const horaInicioStr = document.getElementById('uni-hora').value;
                 const duracaoStr = document.getElementById('uni-duracao').value;
                 const horaTerminoCalc = window.horaTerminoCalculado(horaInicioStr, duracaoStr);
 
-                // EVOLUÇÃO: Salvamento limpo, direto na raiz do documento
                 const payload = { 
                     cliente: document.getElementById('uni-cliente-input').value.toUpperCase(), 
                     documento: document.getElementById('uni-doc').value,
@@ -737,7 +799,7 @@
                     horaInicio: horaInicioStr,
                     duracao: duracaoStr,
                     horaTermino: horaTerminoCalc,
-                    temNf: isNf ? "SIM" : "NÃO",
+                    temNf: opNf,
                     valor: valorTotal,
                     valorPago: parseFloat(document.getElementById('uni-valor-pago').value || 0),
                     statusPgto: document.getElementById('uni-status-pgto').value,
@@ -815,24 +877,72 @@
         window.renderAgendaFrontend = () => { window.alternarView('agenda'); };
 
         // === DOCUMENTOS E ANEXOS ===
-        window.renderListaAnexosModal = (anexos = []) => {
+        window.excluirAnexo = async (id, index, urlAnexo) => {
+            const ev = window.dadosGlobais.find(e => e.id === id);
+            if (!ev) return;
+            const result = await Swal.fire({
+                title: 'Excluir documento?',
+                text: 'Deseja remover este arquivo do sistema?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                confirmButtonText: 'Sim, excluir',
+                cancelButtonText: 'Cancelar',
+                background: '#1a1d24', color: '#fff'
+            });
+            
+            if (result.isConfirmed) {
+                Swal.fire({title:'A excluir...', didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff', allowOutsideClick: false});
+                try {
+                    fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify({ acao: 'EXCLUIR_ARQUIVO', url: urlAnexo }) }).catch(e => console.log('Sem rota no Apps Script'));
+                    
+                    let anexos = window.compilarAnexos(ev);
+                    anexos.splice(index, 1);
+                    
+                    await updateDoc(doc(db, "pedidos", id), { anexos: anexos });
+                    
+                    const modalEditOpen = document.getElementById('modal-unificado') && !document.getElementById('modal-unificado').classList.contains('hidden');
+                    if (modalEditOpen) {
+                        window.renderListaAnexosModal(id, anexos);
+                        Swal.fire({icon: 'success', title: 'Excluído!', timer: 1500, showConfirmButton: false, background: '#1a1d24'});
+                    } else {
+                        Swal.close();
+                        window.abrirListaAnexos(id);
+                        setTimeout(() => Swal.fire({icon: 'success', title: 'Excluído!', timer: 1500, showConfirmButton: false, background: '#1a1d24', toast: true, position: 'top-end'}), 300);
+                    }
+                } catch(e) {
+                    Swal.fire('Erro', 'Não foi possível excluir o anexo.', 'error');
+                }
+            }
+        };
+
+        window.renderListaAnexosModal = (id, anexos = []) => {
             const box = document.getElementById('uni-lista-anexos-box');
             if(!box) return;
             if(anexos.length === 0) { box.innerHTML = '<p class="text-[10px] text-gray-500 italic">Nenhum documento anexado.</p>'; return; }
             let html = '';
-            anexos.forEach(a => {
+            anexos.forEach((a, index) => {
                 const d = new Date(a.data);
                 const pad = n => n.toString().padStart(2, '0');
                 let dataStr = isNaN(d.getTime()) ? '' : `${pad(d.getDate())}-${pad(d.getMonth()+1)}-${d.getFullYear()} • ${pad(d.getHours())}:${pad(d.getMinutes())}`;
                 let dataHtml = dataStr ? `<span class="block text-[8px] text-gray-500 font-medium mt-1 uppercase tracking-wider">${dataStr}</span>` : '';
                 
-                html += `<a href="${a.url}" target="_blank" class="flex items-center justify-between bg-[#111318] p-3 mb-2 rounded-lg border border-[#2a2e39] hover:border-[#d4af37] transition group">
+                let btnExcluir = '';
+                let nomeUpper = a.nome ? a.nome.toUpperCase() : '';
+                if (!nomeUpper.includes('ORÇAMENTO') && !nomeUpper.includes('CONTRATO')) {
+                    btnExcluir = `<button onclick="event.preventDefault(); window.excluirAnexo('${id}', ${index}, '${a.url}')" class="text-red-400 hover:text-red-300 ml-2" title="Excluir"><i data-lucide="trash-2" class="w-4 h-4"></i></button>`;
+                }
+
+                html += `<div class="flex items-center justify-between bg-[#111318] p-3 mb-2 rounded-lg border border-[#2a2e39] hover:border-[#d4af37] transition group">
                             <div class="flex flex-col truncate pr-2 w-[85%]">
                                 <span class="text-[10px] font-bold text-gray-300 uppercase truncate text-left">${a.nome}</span>
                                 ${dataHtml}
                             </div>
-                            <i data-lucide="external-link" class="w-4 h-4 text-[#d4af37] shrink-0"></i>
-                        </a>`;
+                            <div class="flex items-center gap-1">
+                                <a href="${a.url}" target="_blank" class="text-[#d4af37] hover:text-white transition"><i data-lucide="external-link" class="w-4 h-4"></i></a>
+                                ${btnExcluir}
+                            </div>
+                        </div>`;
             });
             box.innerHTML = html; 
             if(window.lucide) lucide.createIcons();
@@ -853,19 +963,28 @@
             }
             
             let html = '<div class="space-y-3 mt-4 max-h-64 overflow-y-auto custom-scrollbar pr-2">';
-            anexos.forEach((a) => {
+            anexos.forEach((a, index) => {
                 const d = new Date(a.data);
                 const pad = n => n.toString().padStart(2, '0');
                 let dataStr = isNaN(d.getTime()) ? '' : `${pad(d.getDate())}-${pad(d.getMonth()+1)}-${d.getFullYear()} • ${pad(d.getHours())}:${pad(d.getMinutes())}`;
                 let dataHtml = dataStr ? `<span class="block text-[8px] text-gray-500 font-medium mt-1 uppercase tracking-wider">${dataStr}</span>` : '';
                 
-                html += `<a href="${a.url}" target="_blank" class="flex items-center justify-between bg-[#111318] p-3 mb-2 rounded-lg border border-[#2a2e39] hover:border-[#d4af37] transition group">
+                let btnExcluir = '';
+                let nomeUpper = a.nome ? a.nome.toUpperCase() : '';
+                if (!nomeUpper.includes('ORÇAMENTO') && !nomeUpper.includes('CONTRATO')) {
+                    btnExcluir = `<button onclick="event.preventDefault(); window.excluirAnexo('${id}', ${index}, '${a.url}')" class="text-red-400 hover:text-red-300 ml-2" title="Excluir"><i data-lucide="trash-2" class="w-4 h-4"></i></button>`;
+                }
+
+                html += `<div class="flex items-center justify-between bg-[#111318] p-3 mb-2 rounded-lg border border-[#2a2e39] hover:border-[#d4af37] transition group">
                             <div class="flex flex-col truncate pr-2 w-[85%]">
                                 <span class="text-[10px] font-bold text-gray-300 uppercase truncate text-left">${a.nome}</span>
                                 ${dataHtml}
                             </div>
-                            <i data-lucide="external-link" class="w-4 h-4 text-[#d4af37] shrink-0"></i>
-                        </a>`;
+                            <div class="flex items-center gap-1">
+                                <a href="${a.url}" target="_blank" class="text-[#d4af37] hover:text-white transition"><i data-lucide="external-link" class="w-4 h-4"></i></a>
+                                ${btnExcluir}
+                            </div>
+                        </div>`;
             });
             html += '</div>';
             
@@ -913,7 +1032,7 @@
 
             if (tipoDoc === 'Contrato Assinado') {
                 novoNomeUpload = `Contrato Assinado - ${clienteNome} ${dataEvStr}.${ext}`;
-                baseTypeDisplay = 'Contrato'; // Agrupa na visão do modal como Contrato (X)
+                baseTypeDisplay = 'Contrato'; 
             } else if (tipoDoc === 'Comprovante') {
                 novoNomeUpload = `Comprovante - ${clienteNome}.${ext}`;
             } else if (tipoDoc === 'Extrato') {
@@ -942,7 +1061,7 @@
                         anexos.push({ nome: finalName, url: req.url, data: new Date().toISOString() });
                         
                         await updateDoc(doc(db, "pedidos", id), { anexos: anexos });
-                        window.renderListaAnexosModal(anexos);
+                        window.renderListaAnexosModal(id, anexos);
                         
                         fileInput.value = ""; 
                         Swal.fire({icon:'success', title:'Upload Completo!', timer:1500, showConfirmButton:false, background:'#1a1d24'});
@@ -952,7 +1071,7 @@
             reader.readAsDataURL(file);
         };
 
-        // === AUTOMAÇÃO: GERAR EXTRATO DA BANDA (PRÉ-VISUALIZAÇÃO + PDF PERFEITO) ===
+        // === AUTOMAÇÃO: GERAR EXTRATO DA BANDA (RENDERIZAÇÃO JPG) ===
         window.gerarExtratoBanda = async () => {
             try {
                 const id = document.getElementById('uni-id').value; 
@@ -965,35 +1084,35 @@
                 const cidade = ev.cidade || 'CIDADE'; 
                 const uf = ev.uf || 'UF';
 
-                const isNf = document.getElementById('uni-temnf').checked;
-                const valorBase = window.parseMoeda(document.getElementById('uni-valor-input').value);
-                const valorTotal = isNf ? (valorBase * 1.12) : valorBase;
+                let valorOrcamento = window.parseMoeda(document.getElementById('uni-valor-input')?.value || "0");
+                let opNf = document.getElementById('uni-temnf')?.value || "NÃO";
+                let valorTotal = (opNf === "SIM") ? (valorOrcamento * 1.12) : valorOrcamento;
 
-                const gL = parseFloat(document.getElementById('uni-gas-luc').value || 0); 
-                const gS = parseFloat(document.getElementById('uni-gas-ser').value || 0);
-                const gC = parseFloat(document.getElementById('uni-gas-ces').value || 0); 
-                const gV = parseFloat(document.getElementById('uni-gas-lev').value || 0);
-                const van = parseFloat(document.getElementById('uni-custo-van').value || 0); 
-                
-                // Regra do Roadie (+100 no Custo e vai para o Cesimbra)
-                const roadieCusto = document.getElementById('uni-roadie').checked ? 100 : 0;
-                
-                let imposto = isNf ? (valorBase * 0.12) : 0;
-                let despesasTotal = roadieCusto + gL + gC + gV + gS + imposto + van;
-                let liquido = valorTotal - despesasTotal;
-                let parteBase = liquido / 5; 
-                let prodIndiv = parteBase / 2;
-                
-                const cL = parteBase + prodIndiv + gL; 
-                const cS = parteBase + prodIndiv + gS; 
-                const cC = parteBase + gC + roadieCusto; // <- Cesimbra recebe o valor do Roadie
-                const cV = parteBase + gV;
+                let imposto = (opNf !== "NÃO") ? (valorOrcamento * 0.12) : 0;
+                let roadieCusto = document.getElementById('uni-roadie')?.checked ? 100 : 0;
+                let gasL = parseFloat(document.getElementById('uni-gas-luc')?.value || 0);
+                let gasS = parseFloat(document.getElementById('uni-gas-ser')?.value || 0);
+                let gasC = parseFloat(document.getElementById('uni-gas-ces')?.value || 0);
+                let gasLevi = parseFloat(document.getElementById('uni-gas-lev')?.value || 0);
+                let van = parseFloat(document.getElementById('uni-custo-van')?.value || 0);
 
-                // O CONTEÚDO HTML DO EXTRATO BANCÁRIO (Design Minimalista Térmico)
+                let totalGasolina = gasL + gasS + gasC + gasLevi;
+                let despesasLogistica = roadieCusto + totalGasolina + van;
+                
+                let liquidoDivisivel = valorOrcamento - imposto - despesasLogistica;
+                let fundoProducao = liquidoDivisivel / 5;
+                let prodIndiv = fundoProducao / 2;
+
+                let cacheLuciano = fundoProducao + prodIndiv + gasL;
+                let cacheSerginho = fundoProducao + prodIndiv + gasS;
+                let cacheCesimbra = fundoProducao + roadieCusto + gasC;
+                let cacheLevi = fundoProducao + gasLevi;
+
+                // O CONTEÚDO HTML DO EXTRATO BANCÁRIO 
                 const extratoHTML = `
                     <div style="width: 260px; padding: 10px; background: #ffffff; color: #000000; font-family: 'Courier New', Courier, monospace; box-sizing: border-box; margin: 0 auto;">
                         <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px;">
-                            <img src="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/logo%20preto%20(2).png?alt=media" style="height: 40px; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto;">
+                            <img src="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/logo%20preto%20(2).png?alt=media" crossorigin="anonymous" style="height: 40px; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto;">
                             <h1 style="font-size: 13px; font-weight: bold; margin: 0; font-family: 'Montserrat', sans-serif;">PAGAMENTO DETALHADO</h1>
                             <p style="font-size: 10px; margin: 2px 0 8px 0;">EXTRATO DA BANDA</p>
                             
@@ -1004,44 +1123,86 @@
 
                         <div style="margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 10px; font-size: 11px;">
                             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                                <span>Valor Acordado</span>
+                                <span>${opNf === "SIM" ? 'VALOR COM NOTA' : 'VALOR'}</span>
                                 <strong>${window.fmtMoeda_n(valorTotal)}</strong>
                             </div>
+                            ${opNf !== "NÃO" ? `
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2px; color: #d93025;">
-                                <span>Despesas e Imp</span>
-                                <strong>- ${window.fmtMoeda_n(despesasTotal)}</strong>
+                                <span>Impostos (NF)</span>
+                                <strong>- ${window.fmtMoeda_n(imposto)}</strong>
+                            </div>` : ''}
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 2px; color: #d93025;">
+                                <span>Despesas (Logística)</span>
+                                <strong>- ${window.fmtMoeda_n(despesasLogistica)}</strong>
                             </div>
-                            <div style="text-align: right; font-size: 9px; color: #555; margin-bottom: 8px;">
-                                (Van: ${window.fmtMoeda_n(van)} / Roadie: ${window.fmtMoeda_n(roadieCusto)})
+                            <div style="text-align: right; font-size: 9px; color: #555; margin-bottom: 8px; line-height: 1.3;">
+                                ${roadieCusto > 0 ? `Roadie: ${window.fmtMoeda_n(roadieCusto)}<br>` : ''}
+                                ${totalGasolina > 0 ? `Gasolina: ${window.fmtMoeda_n(totalGasolina)}<br>` : ''}
+                                ${van > 0 ? `Van: ${window.fmtMoeda_n(van)}` : ''}
                             </div>
                             <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; font-weight: bold;">
                                 <span>Líquido Divisível</span>
-                                <span>${window.fmtMoeda_n(liquido)}</span>
+                                <span>${window.fmtMoeda_n(liquidoDivisivel)}</span>
                             </div>
                             <div style="text-align: right; font-size: 9px; margin-top: 8px;">
-                                FUNDO PRODUÇÃO: <strong>${window.fmtMoeda_n(parteBase)}</strong>
+                                FUNDO PRODUÇÃO: <strong>${window.fmtMoeda_n(fundoProducao)}</strong>
                             </div>
                         </div>
 
-                        <div style="font-size: 11px;">
-                            <h3 style="font-size: 11px; text-align: center; font-weight: bold; margin-bottom: 10px;">DISTRIBUIÇÃO DE CACHÊS</h3>
+                        <div style="font-size: 11px; margin-top: 10px;">
+                            <h3 style="font-size: 11px; text-align: center; font-weight: bold; margin-bottom: 15px;">DISTRIBUIÇÃO DE CACHÊS</h3>
                             
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; align-items: flex-end;">
-                                <span><strong>Luciano</strong><br><span style="font-size: 8px; color: #555;">(Base + Prod + Gas)</span></span>
-                                <strong>${window.fmtMoeda_n(cL)}</strong>
+                            <!-- Luciano -->
+                            <div style="margin-bottom: 12px;">
+                                <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 2px;">
+                                    <span>Luciano</span>
+                                    <span>${window.fmtMoeda_n(cacheLuciano)}</span>
+                                </div>
+                                <div style="font-size: 9px; color: #555; line-height: 1.3;">
+                                    Base: ${window.fmtMoeda(fundoProducao)}<br>
+                                    Prod: ${window.fmtMoeda(prodIndiv)}<br>
+                                    ${gasL > 0 ? `Gas: ${window.fmtMoeda(gasL)}` : ''}
+                                </div>
                             </div>
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; align-items: flex-end;">
-                                <span><strong>Serginho</strong><br><span style="font-size: 8px; color: #555;">(Base + Prod + Gas)</span></span>
-                                <strong>${window.fmtMoeda_n(cS)}</strong>
+
+                            <!-- Serginho -->
+                            <div style="margin-bottom: 12px;">
+                                <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 2px;">
+                                    <span>Serginho</span>
+                                    <span>${window.fmtMoeda_n(cacheSerginho)}</span>
+                                </div>
+                                <div style="font-size: 9px; color: #555; line-height: 1.3;">
+                                    Base: ${window.fmtMoeda(fundoProducao)}<br>
+                                    Prod: ${window.fmtMoeda(prodIndiv)}<br>
+                                    ${gasS > 0 ? `Gas: ${window.fmtMoeda(gasS)}` : ''}
+                                </div>
                             </div>
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; align-items: flex-end;">
-                                <span><strong>Cesimbra</strong><br><span style="font-size: 8px; color: #555;">(Base + Roadie + Gas)</span></span>
-                                <strong>${window.fmtMoeda_n(cC)}</strong>
+
+                            <!-- Cesimbra -->
+                            <div style="margin-bottom: 12px;">
+                                <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 2px;">
+                                    <span>Cesimbra</span>
+                                    <span>${window.fmtMoeda_n(cacheCesimbra)}</span>
+                                </div>
+                                <div style="font-size: 9px; color: #555; line-height: 1.3;">
+                                    Base: ${window.fmtMoeda(fundoProducao)}<br>
+                                    ${roadieCusto > 0 ? `Roadie: ${window.fmtMoeda(roadieCusto)}<br>` : ''}
+                                    ${gasC > 0 ? `Gas: ${window.fmtMoeda(gasC)}` : ''}
+                                </div>
                             </div>
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; align-items: flex-end;">
-                                <span><strong>Levi</strong><br><span style="font-size: 8px; color: #555;">(Base + Gas)</span></span>
-                                <strong>${window.fmtMoeda_n(cV)}</strong>
+
+                            <!-- Levi -->
+                            <div style="margin-bottom: 12px;">
+                                <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 2px;">
+                                    <span>Levi</span>
+                                    <span>${window.fmtMoeda_n(cacheLevi)}</span>
+                                </div>
+                                <div style="font-size: 9px; color: #555; line-height: 1.3;">
+                                    Base: ${window.fmtMoeda(fundoProducao)}<br>
+                                    ${gasLevi > 0 ? `Gas: ${window.fmtMoeda(gasLevi)}` : ''}
+                                </div>
                             </div>
+
                         </div>
                         
                         <div style="text-align: center; margin-top: 15px; font-size: 8px; color: #555; border-top: 1px dashed #000; padding-top: 10px;">
@@ -1061,96 +1222,117 @@
                     `,
                     background: '#1a1d24',
                     showCancelButton: true,
+                    showDenyButton: true,
                     confirmButtonColor: '#10b981',
+                    denyButtonColor: '#3b82f6',
                     cancelButtonColor: '#3f3f46',
-                    confirmButtonText: '<i data-lucide="check" class="w-4 h-4 inline mr-1"></i> Aprovar e Gerar',
+                    confirmButtonText: '<i data-lucide="upload-cloud" class="w-4 h-4 inline mr-1"></i> Salvar no Drive',
+                    denyButtonText: '<i data-lucide="copy" class="w-4 h-4 inline mr-1"></i> Copiar Imagem',
                     cancelButtonText: 'Cancelar',
                     width: 'auto',
                     didOpen: () => { if(window.lucide) lucide.createIcons(); }
                 }).then(async (result) => {
-                    if (result.isConfirmed) {
-                        Swal.fire({title:'A gerar Extrato...', text: 'A processar o recibo e a guardar no Drive...', didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff', allowOutsideClick: false});
+                    if (result.isConfirmed || result.isDenied) {
+                        Swal.fire({title:'Processando...', text: 'Gerando a imagem do extrato...', didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff', allowOutsideClick: false});
 
-                        // SOLUÇÃO PDF EM BRANCO: Container Absoluto no topo para a câmara fotografar
+                        // SOLUÇÃO DEFINITIVA JPG: Container posicionado fora de vista para foto
                         const pdfContainer = document.createElement('div');
                         pdfContainer.style.position = 'absolute';
-                        pdfContainer.style.top = '0px';
-                        pdfContainer.style.left = '-9999px'; // Fora de vista, mas no topo
-                        pdfContainer.style.width = '280px';
-                        pdfContainer.style.zIndex = '-1';
+                        pdfContainer.style.top = '-9999px';
+                        pdfContainer.style.left = '0';
+                        pdfContainer.style.width = '300px';
+                        pdfContainer.style.backgroundColor = '#ffffff';
                         pdfContainer.innerHTML = extratoHTML;
                         document.body.appendChild(pdfContainer);
 
-                        // Garante que a imagem do Logo carregou antes de fotografar
+                        // Garante que a imagem do Logo carregou antes de fotografar (Embora base64 seja imediato)
                         const img = pdfContainer.querySelector('img');
-                        if (img) {
+                        if (img && img.src.startsWith('http')) {
                             await new Promise((resolve) => {
                                 if (img.complete) resolve();
                                 else {
                                     img.onload = resolve;
-                                    img.onerror = resolve; // Avança mesmo se a net falhar
+                                    img.onerror = resolve; 
                                 }
                             });
                         }
+                        
+                        await new Promise(r => setTimeout(r, 100)); // Pequena pausa para a tela formatar os componentes
 
-                        // Configuração do Conversor PDF (Formato 80mm - Cupom Térmico)
-                        const opt = {
-                            margin:       [5, 5, 5, 5],
-                            filename:     `EXTRATO_${cliente}.pdf`,
-                            image:        { type: 'jpeg', quality: 1.0 },
-                            html2canvas:  { scale: 2, useCORS: true, logging: false, scrollY: 0, scrollX: 0 }, // scrollY: 0 resolve o "espaço em branco"
-                            jsPDF:        { unit: 'mm', format: [80, 200], orientation: 'portrait' }
-                        };
-
-                        // Gera o PDF em Base64
-                        const pdfBase64 = await html2pdf().set(opt).from(pdfContainer).outputPdf('datauristring');
+                        // Gera o JPG/PNG através do HTML2Canvas puro
+                        const canvas = await html2canvas(pdfContainer, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
                         document.body.removeChild(pdfContainer); // Limpa o ambiente
 
-                        // Envia para o Google Drive via Apps Script
-                        const req = await fetch(URL_BACKEND, {
-                            method: 'POST', 
-                            body: JSON.stringify({ 
-                                acao: 'SALVAR_ARQUIVO', 
-                                filename: `EXTRATO - ${cliente}.pdf`, 
-                                mimeType: 'application/pdf', 
-                                base64: pdfBase64 
-                            })
-                        }).then(r => r.json());
-
-                        if(req.success) {
-                            // Guarda Anexo no Firebase
-                            let anexos = window.compilarAnexos(ev);
-                            let countExt = anexos.filter(a => a.nome && a.nome.toUpperCase().startsWith('EXTRATO')).length;
-                            let finalName = `Extrato (${countExt + 1})`;
-                            
-                            anexos.push({ nome: finalName, url: req.url, data: new Date().toISOString() });
-                            await updateDoc(doc(db, "pedidos", id), { anexos: anexos });
-                            window.renderListaAnexosModal(anexos);
-                            
-                            // Monta a Mensagem de Whatsapp para a Camila
-                            const msg = `Oi amor! Segue o extrato de ${cliente} ${dataExibicao} ${cidade}-${uf}\n\n${req.url}`;
-                            const linkWpp = `https://wa.me/555491372401?text=${encodeURIComponent(msg)}`;
-
-                            window.fecharModalUnificado();
-                            
-                            Swal.fire({
-                                icon: 'success', 
-                                title: 'Extrato Gerado!', 
-                                text: 'O PDF foi guardado no Drive e anexado.',
-                                showCancelButton: true,
-                                confirmButtonText: '<i data-lucide="message-circle" class="w-4 h-4 inline mr-1"></i> Enviar p/ Camila',
-                                cancelButtonText: 'Fechar',
-                                confirmButtonColor: '#10b981',
-                                cancelButtonColor: '#3f3f46',
-                                background: '#1a1d24', color: '#fff'
-                            }).then((res) => {
-                                if (res.isConfirmed) {
-                                    window.open(linkWpp, '_blank');
+                        if (result.isDenied) {
+                            // OPÇÃO: COPIAR PARA A ÁREA DE TRANSFERÊNCIA
+                            canvas.toBlob(async (blob) => {
+                                try {
+                                    const item = new ClipboardItem({ "image/png": blob });
+                                    await navigator.clipboard.write([item]);
+                                    Swal.fire({icon: 'success', title: 'Copiado!', text: 'A imagem foi copiada. Abra o WhatsApp e clique em "Colar".', background: '#1a1d24', color: '#fff'});
+                                } catch (err) {
+                                    console.error("Erro ao copiar: ", err);
+                                    // SOLUÇÃO: Se o navegador bloquear a cópia automática, mostra a imagem na tela para o usuário segurar e copiar manualmente.
+                                    const imgDataUrl = canvas.toDataURL('image/png');
+                                    Swal.fire({
+                                        title: '<span class="text-sm text-[#d4af37] uppercase tracking-widest font-bold">Toque e segure na imagem para Copiar ou Compartilhar</span>',
+                                        html: `<img src="${imgDataUrl}" style="width: 100%; max-width: 320px; margin: 0 auto; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">`,
+                                        background: '#1a1d24',
+                                        confirmButtonText: 'Fechar',
+                                        confirmButtonColor: '#3f3f46'
+                                    });
                                 }
-                            });
-                            if(window.lucide) lucide.createIcons();
-                        } else {
-                            throw new Error(req.error);
+                            }, 'image/png');
+                        } else if (result.isConfirmed) {
+                            // OPÇÃO: SALVAR NO DRIVE E FIREBASE
+                            const jpgBase64 = canvas.toDataURL('image/jpeg', 0.9);
+
+                            // Envia para o Google Drive via Apps Script
+                            const req = await fetch(URL_BACKEND, {
+                                method: 'POST', 
+                                body: JSON.stringify({ 
+                                    acao: 'SALVAR_ARQUIVO', 
+                                    filename: `EXTRATO - ${cliente}.jpg`, 
+                                    mimeType: 'image/jpeg', 
+                                    base64: jpgBase64 
+                                })
+                            }).then(r => r.json());
+
+                            if(req.success) {
+                                // Guarda Anexo no Firebase
+                                let anexos = window.compilarAnexos(ev);
+                                let countExt = anexos.filter(a => a.nome && a.nome.toUpperCase().startsWith('EXTRATO')).length;
+                                let finalName = `Extrato (${countExt + 1})`;
+                                
+                                anexos.push({ nome: finalName, url: req.url, data: new Date().toISOString() });
+                                await updateDoc(doc(db, "pedidos", id), { anexos: anexos });
+                                window.renderListaAnexosModal(id, anexos);
+                                
+                                // Monta a Mensagem de Whatsapp para a Camila
+                                const msg = `Oi amor! Segue o extrato de ${cliente} ${dataExibicao} ${cidade}-${uf}\n\n${req.url}`;
+                                const linkWpp = `https://wa.me/555491372401?text=${encodeURIComponent(msg)}`;
+
+                                window.fecharModalUnificado();
+                                
+                                Swal.fire({
+                                    icon: 'success', 
+                                    title: 'Extrato Salvo!', 
+                                    text: 'A imagem foi guardada no Drive e anexada.',
+                                    showCancelButton: true,
+                                    confirmButtonText: '<i data-lucide="message-circle" class="w-4 h-4 inline mr-1"></i> Enviar p/ Camila',
+                                    cancelButtonText: 'Fechar',
+                                    confirmButtonColor: '#10b981',
+                                    cancelButtonColor: '#3f3f46',
+                                    background: '#1a1d24', color: '#fff'
+                                }).then((res) => {
+                                    if (res.isConfirmed) {
+                                        window.open(linkWpp, '_blank');
+                                    }
+                                });
+                                if(window.lucide) lucide.createIcons();
+                            } else {
+                                throw new Error(req.error);
+                            }
                         }
                     }
                 });
