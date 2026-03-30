@@ -288,6 +288,42 @@
         </div>
     </div>
 
+    <!-- MODAL DE CONCORRÊNCIA -->
+    <div id="modal-concorrencia" class="modal-overlay hidden overflow-y-auto pt-10 pb-10 z-[70]" onclick="if(event.target === this) window.fecharModalConcorrencia()">
+        <div class="bg-[#1a1d24] rounded-xl border border-[#2a2e39] w-full max-w-lg m-auto shadow-2xl relative">
+            <div class="p-6 border-b border-[#2a2e39] flex justify-between items-center bg-[#111318] rounded-t-xl">
+                <h3 class="text-sm font-bold text-gray-300 uppercase tracking-widest"><i data-lucide="alert-triangle" class="w-4 h-4 inline mr-2 text-amber-500"></i> Análise de Logística</h3>
+                <button onclick="window.fecharModalConcorrencia()" class="text-gray-500 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="bg-[#111318] p-4 rounded-lg border border-blue-900/50 shadow-inner">
+                    <span class="text-[9px] text-blue-500 font-bold uppercase block mb-1 tracking-widest">Novo Pedido</span>
+                    <h4 class="text-lg font-black text-white uppercase flex items-center" id="conc-nome-novo">CLIENTE</h4>
+                    <div id="conc-detalhes-novo"></div>
+                    <div class="mt-3 pt-3 border-t border-[#2a2e39]">
+                        <label class="text-[9px] text-gray-500 uppercase font-bold mb-1 block">Local do Evento (Editável)</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="conc-local-novo" class="input-erp w-full text-xs font-bold text-white" oninput="window.atualizarLinksDistancia()">
+                            <button onclick="window.salvarLocalLogistica()" class="bg-[#10b981] text-white hover:bg-green-600 transition px-3 rounded flex items-center justify-center shrink-0" title="Salvar Local na Agenda e Sistema"><i data-lucide="save" class="w-4 h-4"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="text-[10px] font-bold text-gray-500 uppercase mb-3 border-b border-[#2a2e39] pb-1">Eventos na mesma data</h4>
+                    <div id="lista-concorrentes" class="space-y-3 max-h-[40vh] overflow-y-auto custom-scrollbar pr-1">
+                        <!-- Cards injetados via JS -->
+                    </div>
+                </div>
+                
+                <div class="flex gap-2 border-t border-[#2a2e39] pt-4">
+                    <button onclick="window.fecharModalConcorrencia()" class="flex-1 btn-neutral py-3 text-[10px] font-bold uppercase tracking-wider">Cancelar</button>
+                    <button onclick="window.abrirEdicaoDoConcorrencia()" class="flex-1 bg-[#d4af37] text-black hover:bg-[#b5952f] transition font-bold text-[10px] uppercase tracking-wider py-3 rounded shadow-lg flex justify-center items-center gap-2"><i data-lucide="edit" class="w-4 h-4"></i> Ir para Edição</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- VIEWS IMPRESSÃO -->
     <div id="view-demonstrativo" class="report-view bg-white text-black p-8 print-visible"><div id="recibo-content" class="recibo-card"></div></div>
     <div id="view-print-geral" class="report-view bg-white text-black p-8 print-visible"><div id="resumo-content" class="recibo-card"></div></div>
@@ -309,6 +345,7 @@
         window.animacaoInicialRodando = false;
         window.dadosJaCarregados = false;
         window.timeoutKpiAno = null;
+        window.deepLinkProcessado = false; // Controle de deep link (e-mail)
 
         // UTILITÁRIOS
         window.safeNum = (val) => val ? (typeof val === 'number' ? val : parseFloat(String(val).replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]+/g, "")) || 0) : 0;
@@ -332,11 +369,110 @@
         window.formatarCpfCnpj = (i) => { let v = i.value.replace(/\D/g, ""); if (v.length <= 11) { v = v.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2"); } else { v = v.substring(0, 14).replace(/^(\d{2})(\d)/, "$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d)/, "$1-$2"); } i.value = v; };
         window.compilarAnexos = (ev) => { if(!ev) return []; let raw = []; if(ev.anexos) { if(Array.isArray(ev.anexos)) raw = [...ev.anexos]; else Object.values(ev.anexos).forEach(a => raw.push(a)); } return raw; };
 
-        // === SWIPE LOGIC ===
+        // === SWIPE LOGIC (Cards Principais) ===
         window.cardTouchStartX = 0; window.cardTouchStartY = 0;
         window.cardTouchStart = (e, el) => { if(e.touches && e.touches.length > 1) return; window.cardTouchStartX = e.touches ? e.touches[0].clientX : e.clientX; window.cardTouchStartY = e.touches ? e.touches[0].clientY : e.clientY; el.style.transition = 'none'; el.dataset.swiping = 'true'; };
         window.cardTouchMove = (e, el) => { if (el.dataset.swiping !== 'true') return; let currentX = e.touches ? e.touches[0].clientX : e.clientX; let currentY = e.touches ? e.touches[0].clientY : e.clientY; let diffX = currentX - window.cardTouchStartX; let diffY = currentY - window.cardTouchStartY; if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 10) { el.dataset.swiping = 'false'; el.style.transition = 'transform 0.3s ease-out'; el.style.transform = 'translateX(0)'; return; } if (e.cancelable) e.preventDefault(); let moveX = diffX; if(moveX > 120) moveX = 120 + (moveX - 120) * 0.2; if(moveX < -120) moveX = -120 + (moveX + 120) * 0.2; el.style.transform = `translateX(${moveX}px)`; };
         window.cardTouchEnd = (e, el, id) => { if (el.dataset.swiping !== 'true') return; el.dataset.swiping = 'false'; el.style.transition = 'transform 0.3s ease-out'; let currentX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX; let diffX = currentX - window.cardTouchStartX; if (diffX < -80) { el.style.transform = 'translateX(-120%)'; setTimeout(() => { window.reprovarEvento(id); el.style.transform = 'translateX(0)'; }, 200); } else if (diffX > 80) { el.style.transform = 'translateX(120%)'; setTimeout(() => { window.abrirEdicaoUnificada(id); el.style.transform = 'translateX(0)'; }, 200); } else { el.style.transform = 'translateX(0)'; } };
+
+        // === SWIPE LOGIC (Notificações) ===
+        window.notifIsDragging = false;
+        window.notifStartX = 0;
+        window.notifStartY = 0;
+
+        window.notifTouchStart = (e, el) => {
+            if(e.type === 'touchstart' && e.touches && e.touches.length > 1) return;
+            window.notifIsDragging = true;
+            window.notifStartX = e.type.includes('mouse') ? e.pageX : e.touches[0].clientX;
+            window.notifStartY = e.type.includes('mouse') ? e.pageY : e.touches[0].clientY;
+            el.style.transition = 'none';
+            el.dataset.swiping = 'true';
+            el.dataset.moved = 'false';
+        };
+
+        window.notifTouchMove = (e, el) => {
+            if (!window.notifIsDragging || el.dataset.swiping !== 'true') return;
+            let currentX = e.type.includes('mouse') ? e.pageX : e.touches[0].clientX;
+            let currentY = e.type.includes('mouse') ? e.pageY : e.touches[0].clientY;
+            let diffX = currentX - window.notifStartX;
+            let diffY = currentY - window.notifStartY;
+            
+            if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 10) {
+                el.dataset.swiping = 'false';
+                window.notifIsDragging = false;
+                el.style.transition = 'transform 0.3s ease-out';
+                el.style.transform = 'translateX(0)';
+                return;
+            }
+            
+            if (Math.abs(diffX) > 5) el.dataset.moved = 'true';
+            
+            if (e.cancelable) e.preventDefault();
+            let moveX = diffX;
+            if(moveX > 100) moveX = 100 + (moveX - 100) * 0.2;
+            if(moveX < -100) moveX = -100 + (moveX + 100) * 0.2;
+            el.style.transform = `translateX(${moveX}px)`;
+        };
+
+        window.notifTouchEnd = (e, el, key) => {
+            if (!window.notifIsDragging || el.dataset.swiping !== 'true') return;
+            el.dataset.swiping = 'false';
+            window.notifIsDragging = false;
+            el.style.transition = 'transform 0.3s ease-out';
+            
+            if (el.dataset.moved !== 'true') {
+                 el.style.transform = 'translateX(0)';
+                 return;
+            }
+
+            let currentX = e.type.includes('mouse') ? e.pageX : (e.changedTouches ? e.changedTouches[0].clientX : window.notifStartX);
+            let diffX = currentX - window.notifStartX;
+
+            if (diffX < -60) { // Arrasta p/ esquerda
+                el.style.transform = 'translateX(-100%)';
+                setTimeout(() => { window.toggleNotifArchive(key); el.style.transform = 'translateX(0)'; }, 200);
+            } else if (diffX > 60) { // Arrasta p/ direita
+                el.style.transform = 'translateX(100%)';
+                setTimeout(() => { window.toggleNotifPin(key); el.style.transform = 'translateX(0)'; }, 200);
+            } else {
+                el.style.transform = 'translateX(0)';
+            }
+        };
+
+        window.toggleNotifArchive = (key) => {
+            let state = JSON.parse(localStorage.getItem('jazz_notif_state')) || { archived: [], pinned: [] };
+            if(state.archived.includes(key)) {
+                state.archived = state.archived.filter(k => k !== key); // Restaura se já tava arquivado
+            } else {
+                state.archived.push(key); // Arquiva/Esmaece
+                state.pinned = state.pinned.filter(k => k !== key);
+            }
+            localStorage.setItem('jazz_notif_state', JSON.stringify(state));
+            window.atualizarNotificacoes(); 
+        };
+
+        window.toggleNotifPin = (key) => {
+            let state = JSON.parse(localStorage.getItem('jazz_notif_state')) || { archived: [], pinned: [] };
+            if(state.pinned.includes(key)) {
+                state.pinned = state.pinned.filter(k => k !== key); // Desafixa
+            } else {
+                state.pinned.push(key); // Fixa no Topo
+                state.archived = state.archived.filter(k => k !== key); 
+            }
+            localStorage.setItem('jazz_notif_state', JSON.stringify(state));
+            window.atualizarNotificacoes(); 
+        };
+
+        window.enviarDadosContador = (id) => {
+            const ev = window.dadosGlobais.find(e => e.id === id);
+            if(!ev || !ev.dadosNf) return;
+            const nf = ev.dadosNf;
+            const endereco = `${nf.endereco || ''}, ${nf.numero || ''}${nf.complemento ? ' - ' + nf.complemento : ''}, ${nf.bairro || ''}`;
+            const textoWpp = `Oi Ketelin,\n\nVou precisar de mais uma nota fiscal. Seguem os dados:\n\n*Dados do Cliente*\nCNPJ ou CPF: ${nf.doc || ''}\nRazão Social ou Nome Completo: ${nf.nome || ''}\nEndereço Completo: ${endereco}\nCidade - Estado: ${nf.cidade || ''} - ${nf.uf || ''}\nCEP: ${nf.cep || ''}\nInscrição Estadual (IE): ${nf.ie || 'Isento'}\nInscrição Municipal (IM): ${nf.im || 'Isento'}\nE-mail: ${nf.email || ''}\n\n*Dados da Transação*\nDescrição do Serviço: ${nf.descricao || 'Prestação de Serviços Musicais'}\nValor Total: ${window.fmtMoeda(ev.valorNum)}\nLocal da Prestação: ${ev.cidade || ''} - ${ev.uf || ''}`;
+            
+            const urlWpp = `https://api.whatsapp.com/send?phone=555484188715&text=${encodeURIComponent(textoWpp)}`;
+            window.open(urlWpp, '_blank');
+        };
 
         // === MOTOR DE CONEXÃO ===
         window.iniciarConexao = async () => {
@@ -383,14 +519,36 @@
             
             window.dadosGlobais.forEach(ev => {
                 const d = window.extrairAnoMes(ev.dataStr);
+                const dataEvFormatada = window.formatarDataExibicao(ev.dataStr);
+                
+                // Mapeamento dinâmico de concorrência para Avaliação de Logística
+                if (ev.status === 'PRE_RESERVA') {
+                    ev.concorrentes = window.dadosGlobais.filter(outro => {
+                        const dataOutroFormatada = window.formatarDataExibicao(outro.dataStr);
+                        return outro.id !== ev.id && 
+                            dataOutroFormatada === dataEvFormatada && 
+                            dataOutroFormatada !== '--/--/----' &&
+                            (outro.status === 'RESERVA' || outro.status === 'CONFIRMADO' || outro.status === 'PRE_RESERVA');
+                    });
+                }
+
                 if (!ev.notificacaoOculta) {
+                    // 1. NOVO PEDIDO (Livre ou Concorrência)
                     if (ev.status === 'PRE_RESERVA') {
                         const hasConc = ev.concorrentes && ev.concorrentes.length > 0;
-                        notificacoes.push({ ...ev, type: hasConc ? 'NOVO_CONC' : 'NOVO_LIMPO' });
+                        notificacoes.push({ ...ev, notifType: hasConc ? 'NOVO_CONC' : 'NOVO_LIMPO', notifKey: ev.id + '_NOVO' });
                     }
-                    if (ev.status === 'CONFIRMADO' && ev.valorPagoNum < ev.valorNum) notificacoes.push({ ...ev, type: 'COBRANCA' });
+                    // 2. NOVO CONTRATO ASSINADO
+                    else if (ev.linkContrato && ev.linkContrato.trim() !== '') {
+                        notificacoes.push({ ...ev, notifType: 'NOVO_CONTRATO', notifKey: ev.id + '_CONTRATO' });
+                    }
+                    // 3. DADOS DE CONTABILIDADE PREENCHIDOS
+                    else if (ev.dadosNf) {
+                        notificacoes.push({ ...ev, notifType: 'CONTABILIDADE', notifKey: ev.id + '_CONTABILIDADE' });
+                    }
                 }
                 
+                // Contabilidade dos KPIs Principais
                 if (d.ano === ano) {
                     if(ev.status === 'PRE_RESERVA') sAno.pre.qtd++;
                     if(ev.status === 'RESERVA') sAno.reserva.valor += ev.valorNum;
@@ -408,16 +566,29 @@
             clearTimeout(window.timeoutKpiAno);
             
             if (mes !== 'todos') {
-                renderPainelKpis(sAno, true); 
+                window.renderPainelKpis(sAno, true); 
                 window.timeoutKpiAno = setTimeout(() => {
-                    renderPainelKpis(sMes, false); 
+                    window.renderPainelKpis(sMes, false); 
                 }, 3200);
             } else {
-                renderPainelKpis(sMes, false); 
+                window.renderPainelKpis(sMes, false); 
+            }
+
+            // *** LÓGICA DE DEEP LINK (ABRIR PAINEL VIA E-MAIL) ***
+            if (!window.deepLinkProcessado) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const evtId = urlParams.get('id');
+                if (evtId) {
+                    const evFound = window.dadosGlobais.find(e => String(e.id) === String(evtId));
+                    if (evFound) {
+                        window.deepLinkProcessado = true; // Impede que reabra em loop no Snapshot
+                        setTimeout(() => window.abrirEdicaoUnificada(evtId), 800);
+                    }
+                }
             }
         };
 
-        function renderPainelKpis(s, isAno = false) {
+        window.renderPainelKpis = (s, isAno = false) => {
             const sufixo = isAno ? ' (ANO)' : '';
             const cssAnim = isAno ? ' kpi-show' : '';
             const items = [
@@ -434,7 +605,10 @@
             `).join('');
             if(window.lucide) window.lucide.createIcons();
             window.clicarKpi(window.abaAtual);
-        }
+            
+            // Chama a atualização das notificações ao final da renderização
+            window.atualizarNotificacoes();
+        };
 
         window.clicarKpi = (status) => {
             window.abaAtual = status;
@@ -523,11 +697,342 @@
             if(window.lucide) window.lucide.createIcons();
         };
 
+        window.atualizarNotificacoes = () => {
+            const badge = document.getElementById('badge-notificacao');
+            const lista = document.getElementById('lista-notificacoes');
+            const sino = document.getElementById('icone-sino');
+
+            let state = JSON.parse(localStorage.getItem('jazz_notif_state')) || { archived: [], pinned: [] };
+
+            if (window.notificacoesGlobais && window.notificacoesGlobais.length > 0) {
+                // Calcula ativas (não arquivadas)
+                let activeCount = window.notificacoesGlobais.filter(n => !state.archived.includes(n.notifKey)).length;
+                
+                if (activeCount > 0) {
+                    badge.innerText = activeCount;
+                    badge.classList.remove('hidden');
+                    sino.classList.add('text-[#d4af37]', 'animate-pulse');
+                } else {
+                    badge.classList.add('hidden');
+                    sino.classList.remove('text-[#d4af37]', 'animate-pulse');
+                }
+
+                // Ordenação: 1. Fixados -> 2. Normais -> 3. Arquivados (Esmaecidos)
+                let sortedNotifs = [...window.notificacoesGlobais].sort((a, b) => {
+                    let aPin = state.pinned.includes(a.notifKey) ? 1 : 0;
+                    let bPin = state.pinned.includes(b.notifKey) ? 1 : 0;
+                    let aArch = state.archived.includes(a.notifKey) ? 1 : 0;
+                    let bArch = state.archived.includes(b.notifKey) ? 1 : 0;
+
+                    if (aArch !== bArch) return aArch - bArch; 
+                    if (aPin !== bPin) return bPin - aPin;     
+                    return 0; 
+                });
+
+                let html = '';
+                sortedNotifs.forEach(ev => {
+                    const dataPt = window.formatarDataExibicao(ev.dataStr);
+                    const diaSem = window.getDiaSemana(ev.dataStr).toUpperCase();
+                    const isArchived = state.archived.includes(ev.notifKey);
+                    const isPinned = state.pinned.includes(ev.notifKey);
+
+                    let cardOpacity = isArchived ? 'opacity-40 grayscale hover:opacity-80 transition-opacity' : '';
+                    let pinBadge = isPinned && !isArchived ? '<span class="absolute -top-2 -right-2 text-lg drop-shadow-md z-30">📌</span>' : '';
+                    let borderClass = isPinned && !isArchived ? 'border-[#d4af37] shadow-[0_0_15px_rgba(212,175,55,0.2)]' : 'border-[#2a2e39]';
+
+                    // Estrutura Base de Arraste (Swipe)
+                    let swipeWrapperStart = `
+                        <div class="relative mb-3 w-full" style="touch-action: pan-y;">
+                            <div class="absolute inset-0 flex justify-between items-center px-4 rounded-lg bg-[#0a0c10] shadow-inner">
+                                <div class="text-gray-500 font-black flex items-center gap-2 text-[9px] tracking-widest"><i data-lucide="archive" class="w-4 h-4"></i> ${isArchived ? 'RESTAURAR' : 'ESMAECER'}</div>
+                                <div class="text-[#d4af37] font-black flex items-center gap-2 text-[9px] tracking-widest"><i data-lucide="pin" class="w-4 h-4"></i> FIXAR TOPO</div>
+                            </div>
+                            <div class="bg-[#111318] p-3 rounded-lg border ${borderClass} relative z-10 w-full h-full ${cardOpacity}"
+                                 ontouchstart="window.notifTouchStart(event, this)" 
+                                 ontouchmove="window.notifTouchMove(event, this)" 
+                                 ontouchend="window.notifTouchEnd(event, this, '${ev.notifKey}')"
+                                 onmousedown="window.notifTouchStart(event, this)" 
+                                 onmousemove="window.notifTouchMove(event, this)" 
+                                 onmouseup="window.notifTouchEnd(event, this, '${ev.notifKey}')">
+                                ${pinBadge}
+                    `;
+                    let swipeWrapperEnd = `</div></div>`;
+
+                    // CONTEÚDO DO CARD 1: NOVO PEDIDO (Livre ou Avaliar Logística)
+                    if (ev.notifType === 'NOVO_LIMPO' || ev.notifType === 'NOVO_CONC') {
+                        const isLivre = ev.notifType === 'NOVO_LIMPO';
+                        const badgeStatus = isLivre 
+                            ? '<span class="bg-green-900/30 text-green-400 border border-green-900/50 text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">LIVRE</span>' 
+                            : '<span class="bg-amber-900/30 text-amber-500 border border-amber-900/50 text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Avaliar Logística</span>';
+                        
+                        const wppMsg = `Olá ${ev.cliente}! Acabamos de receber sua solicitaçao de orçamento para música ao vivo no seu evento dia ${dataPt}. Entraremos em contato o mais breve possível.`;
+                        const linkWpp = `https://wa.me/55${(ev.whatsapp || '').toString().replace(/\D/g, '')}?text=${encodeURIComponent(wppMsg)}`;
+                        
+                        const actionClick = isLivre ? `window.fecharPaineis(); window.abrirEdicaoUnificada('${ev.id}')` : `window.fecharPaineis(); window.abrirModalConcorrencia('${ev.id}')`;
+                        const animBlink = isLivre && !isArchived ? 'animate-pulse border-blue-400 text-blue-400' : 'border-blue-900/50 text-blue-500';
+
+                        html += swipeWrapperStart + `
+                                <div class="flex justify-between items-start mb-2 cursor-pointer pointer-events-auto" onclick="${actionClick}">
+                                    <span class="bg-blue-900/30 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase border flex items-center gap-1 ${animBlink}">
+                                        Novo Pedido
+                                    </span>
+                                    <span class="text-[9px] text-gray-500 font-mono">${dataPt}</span>
+                                </div>
+                                <div class="cursor-pointer pointer-events-auto" onclick="${actionClick}">
+                                    <p class="text-sm font-bold text-white truncate uppercase mb-0.5">${ev.cliente}</p>
+                                    <p class="text-[10px] text-gray-400 truncate mb-0.5"><i data-lucide="map-pin" class="w-3 h-3 inline"></i> ${ev.cidade || 'Cidade'} - ${ev.uf || 'UF'}</p>
+                                    <p class="text-[10px] text-gray-400 truncate mb-1"><i data-lucide="music" class="w-3 h-3 inline"></i> ${ev.tipo || 'Evento'} • <i data-lucide="users" class="w-3 h-3 inline"></i> ${ev.convidados || '?'} conv.</p>
+                                    <div class="flex justify-between items-center mt-2">
+                                        ${badgeStatus}
+                                        <span class="text-[8px] text-gray-500 uppercase tracking-widest flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">Visualizar <i data-lucide="chevron-right" class="w-3 h-3"></i></span>
+                                    </div>
+                                </div>
+                                <div class="mt-3 pt-3 border-t border-[#2a2e39] flex gap-2 pointer-events-auto relative z-20">
+                                    <a href="${linkWpp}" target="_blank" onclick="event.stopPropagation()" class="flex-1 bg-green-600/20 text-green-500 hover:bg-green-600/40 py-1.5 rounded transition flex items-center justify-center gap-1 text-[9px] font-bold uppercase border border-green-900/50">
+                                        <i data-lucide="message-circle" class="w-3 h-3"></i> WhatsApp
+                                    </a>
+                                </div>
+                        ` + swipeWrapperEnd;
+                    } 
+                    // CARD 2: NOVO CONTRATO
+                    else if (ev.notifType === 'NOVO_CONTRATO') {
+                        const wppMsg = `Olá ${ev.cliente}, tudo bem? Recebemos a assinatura do contrato referente ao evento do dia ${dataPt}.`;
+                        const linkWpp = `https://wa.me/55${(ev.whatsapp || '').toString().replace(/\D/g, '')}?text=${encodeURIComponent(wppMsg)}`;
+                        const actionClick = `window.fecharPaineis(); window.abrirEdicaoUnificada('${ev.id}')`;
+
+                        html += swipeWrapperStart + `
+                                <div class="flex justify-between items-start mb-2 cursor-pointer pointer-events-auto" onclick="${actionClick}">
+                                    <span class="bg-purple-900/30 text-purple-400 border border-purple-900/50 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Novo Contrato</span>
+                                    <span class="text-[9px] text-gray-500 font-mono">${dataPt}</span>
+                                </div>
+                                <p class="text-sm font-bold text-white truncate uppercase mb-1 cursor-pointer pointer-events-auto" onclick="${actionClick}">${ev.cliente}</p>
+                                <p class="text-[9px] text-gray-400 font-bold uppercase mb-3">Contrato Assinado Preenchido</p>
+                                <div class="flex items-center gap-2 pointer-events-auto relative z-20">
+                                    <a href="${linkWpp}" target="_blank" onclick="event.stopPropagation()" class="flex-1 bg-green-600/20 text-green-500 hover:bg-green-600/40 py-1.5 rounded transition flex items-center justify-center gap-1 text-[9px] font-bold uppercase border border-green-900/50">
+                                        <i data-lucide="message-circle" class="w-3 h-3"></i> WhatsApp
+                                    </a>
+                                    <a href="${ev.linkContrato}" target="_blank" onclick="event.stopPropagation()" class="flex-none w-10 bg-[#d4af37] text-black hover:bg-[#b5952f] py-1.5 rounded transition flex items-center justify-center shadow-md">
+                                        <i data-lucide="eye" class="w-4 h-4"></i>
+                                    </a>
+                                </div>
+                        ` + swipeWrapperEnd;
+                    } 
+                    // CARD 3: CONTABILIDADE (Nota Fiscal)
+                    else if (ev.notifType === 'CONTABILIDADE') {
+                        const actionClick = `window.fecharPaineis(); window.abrirEdicaoUnificada('${ev.id}')`;
+                        
+                        html += swipeWrapperStart + `
+                                <div class="flex justify-between items-start mb-2 cursor-pointer pointer-events-auto" onclick="${actionClick}">
+                                    <span class="bg-gray-800 text-gray-300 border border-gray-600 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Contabilidade</span>
+                                    <span class="text-[9px] text-gray-500 font-mono">${dataPt}</span>
+                                </div>
+                                <p class="text-sm font-bold text-white truncate uppercase mb-0.5 cursor-pointer pointer-events-auto" onclick="${actionClick}">${ev.cliente}</p>
+                                <p class="text-[10px] text-gray-400 truncate mb-0.5">Local: ${ev.cidade || 'Cidade'} - ${ev.uf || 'UF'}</p>
+                                <p class="text-[10px] text-gray-400 truncate mb-3">Valor Total: ${window.fmtMoeda_n(ev.valorNum)}</p>
+                                <div class="flex items-center gap-2 pointer-events-auto relative z-20">
+                                    <button onclick="event.stopPropagation(); window.enviarDadosContador('${ev.id}')" class="flex-1 bg-green-600/20 text-green-500 hover:bg-green-600/40 py-1.5 rounded transition flex items-center justify-center gap-1 text-[9px] font-bold uppercase border border-green-900/50">
+                                        <i data-lucide="message-circle" class="w-3 h-3"></i> Enviar p/ Contabilidade
+                                    </button>
+                                </div>
+                        ` + swipeWrapperEnd;
+                    }
+                });
+
+                lista.innerHTML = html;
+                if(window.lucide) window.lucide.createIcons();
+            } else {
+                badge.classList.add('hidden');
+                sino.classList.remove('text-[#d4af37]', 'animate-pulse');
+                lista.innerHTML = '<div class="text-center text-xs text-gray-500 mt-10">Nenhuma notificação no momento.</div>';
+            }
+        };
+
+        window.abrirModalConcorrencia = (id) => {
+            const ev = window.dadosGlobais.find(e => e.id === id);
+            if(!ev) return;
+            
+            // Armazena temporariamente para o modal
+            window.eventoConcorrenciaAtual = ev;
+
+            const wppNumNovo = (ev.whatsapp || '').toString().replace(/\D/g, '');
+            const linkWppNovo = wppNumNovo ? `https://wa.me/55${wppNumNovo}` : '#';
+            const wppBtnNovo = wppNumNovo ? `<a href="${linkWppNovo}" target="_blank" class="text-green-500 hover:text-green-400 transition ml-2 inline-flex items-center" title="WhatsApp"><i data-lucide="message-circle" class="w-5 h-5"></i></a>` : '';
+
+            document.getElementById('conc-nome-novo').innerHTML = `${ev.cliente} ${wppBtnNovo}`;
+            const dataPt = window.formatarDataExibicao(ev.dataStr);
+            const diaSem = window.getDiaSemana(ev.dataStr).toUpperCase();
+            document.getElementById('conc-detalhes-novo').innerHTML = `
+                <div class="space-y-2 mt-3">
+                    <p class="text-sm font-bold text-[#d4af37]"><i data-lucide="calendar" class="w-4 h-4 inline mr-1"></i> ${dataPt} (${diaSem})</p>
+                    <p class="text-sm font-bold text-white"><i data-lucide="clock" class="w-4 h-4 inline mr-1"></i> das ${ev.horaInicio || '--:--'} às ${window.horaTerminoCalculado(ev.horaInicio, ev.duracao)}</p>
+                    <p class="text-xs"><b class="text-gray-500">Cidade:</b> <span class="text-gray-300">${ev.cidade || 'Não informada'} - ${ev.uf || ''}</span></p>
+                    <p class="text-xs"><b class="text-gray-500">Convidados:</b> <span class="text-gray-300">${ev.convidados || 'N/A'}</span></p>
+                </div>
+            `;
+            
+            document.getElementById('conc-local-novo').value = ev.local || '';
+            
+            let htmlConc = '';
+            const concorrentes = ev.concorrentes || [];
+            
+            if (concorrentes.length === 0) {
+                htmlConc = '<p class="text-[10px] text-gray-500">Nenhum evento mapeado na mesma data.</p>';
+            } else {
+                let cidadeNovo = (ev.cidade || '').toUpperCase().trim();
+                let horaNovo = ev.horaInicio || '';
+
+                concorrentes.forEach((conc, idx) => {
+                    let cidadeConc = (conc.cidade || conc.local || '').toUpperCase().trim();
+                    let horaConc = conc.horaInicio || '';
+                    
+                    // Alarme Visual: Mesma cidade (Vermelho), Mesmo Horário (Laranja)
+                    let isMesmaCidade = cidadeNovo && cidadeConc && (cidadeConc.includes(cidadeNovo) || cidadeNovo.includes(cidadeConc));
+                    let isMesmoHorario = horaNovo && horaConc && horaNovo === horaConc;
+                    
+                    let cityClass = isMesmaCidade ? "text-red-400 font-bold border-b border-red-900/50 pb-0.5" : "text-gray-300";
+                    let timeClass = isMesmoHorario ? "text-amber-400 font-bold border-b border-amber-900/50 pb-0.5" : "text-gray-300";
+
+                    const statusCor = conc.status === 'CONFIRMADO' ? 'text-green-500 border-green-900/50 bg-green-900/20' : 'text-amber-500 border-amber-900/50 bg-amber-900/20';
+                    
+                    const wppNumConc = (conc.whatsapp || '').toString().replace(/\D/g, '');
+                    const linkWppConc = wppNumConc ? `https://wa.me/55${wppNumConc}` : '#';
+                    const wppBtnConc = wppNumConc ? `<a href="${linkWppConc}" target="_blank" class="text-green-500 hover:text-green-400 transition ml-2 inline-flex items-center" title="WhatsApp"><i data-lucide="message-circle" class="w-4 h-4"></i></a>` : '';
+
+                    htmlConc += `
+                    <div class="flex justify-center mb-[-10px] relative z-10">
+                        <a href="#" id="rota-maps-${idx}" target="_blank" class="bg-[#111318] border border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition rounded-full px-4 py-1.5 flex items-center justify-center shadow-lg gap-2 text-[10px] font-black uppercase">
+                            <i data-lucide="arrow-up-down" class="w-3 h-3"></i> Ver Rota e Tempo
+                        </a>
+                    </div>
+                    <div class="bg-[#1a1d24] p-4 rounded-lg border border-[#2a2e39] mb-4 shadow-md pt-6 relative z-0">
+                        <div class="flex justify-between items-start mb-3">
+                            <h5 class="text-sm font-black text-white uppercase tracking-wide flex items-center">${conc.cliente || 'Evento'} ${wppBtnConc}</h5>
+                            <span class="text-[8px] px-1.5 py-0.5 rounded border uppercase font-bold tracking-wider ${statusCor}">${conc.status}</span>
+                        </div>
+                        <p class="text-sm font-bold mb-1.5 ${cityClass}"><i data-lucide="map-pin" class="w-4 h-4 inline ${isMesmaCidade ? 'text-red-400' : ''}"></i> ${conc.cidade || conc.local || 'Sem local'} - ${conc.uf || ''}</p>
+                        <p class="text-sm font-bold mb-2 ${timeClass}"><i data-lucide="clock" class="w-4 h-4 inline ${isMesmoHorario ? 'text-amber-400' : ''}"></i> ${conc.horaInicio || '--:--'} às ${window.horaTerminoCalculado(conc.horaInicio, conc.duracao)}</p>
+                        
+                        <div class="flex flex-wrap gap-2 mt-4 pt-3 border-t border-[#2a2e39]" id="acoes-conc-${idx}">
+                            <!-- Botoes inseridos dinamicamente por atualizarLinksDistancia -->
+                        </div>
+                    </div>`;
+                });
+            }
+            
+            document.getElementById('lista-concorrentes').innerHTML = htmlConc;
+            if(window.lucide) window.lucide.createIcons();
+            
+            window.atualizarLinksDistancia();
+            
+            const modal = document.getElementById('modal-concorrencia');
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+        };
+
+        window.fecharModalConcorrencia = () => {
+            const modal = document.getElementById('modal-concorrencia');
+            modal.classList.add('hidden');
+            modal.style.display = '';
+        };
+
+        window.abrirEdicaoDoConcorrencia = () => {
+            if(window.eventoConcorrenciaAtual) {
+                window.fecharModalConcorrencia();
+                window.abrirEdicaoUnificada(window.eventoConcorrenciaAtual.id);
+            }
+        };
+
+        window.atualizarLinksDistancia = () => {
+            const ev = window.eventoConcorrenciaAtual;
+            if(!ev) return;
+            
+            let enderecoNovo = document.getElementById('conc-local-novo').value;
+            // Se nao preencheu local, usa a cidade padrao do lead para a rota
+            if(!enderecoNovo) enderecoNovo = `${ev.cidade || ''} ${ev.uf || ''}`.trim();
+
+            const dataPt = window.formatarDataExibicao(ev.dataStr);
+            const diaSem = window.getDiaSemana(ev.dataStr);
+            const wppNum = (ev.whatsapp || '').toString().replace(/\D/g, '');
+            
+            const concorrentes = ev.concorrentes || [];
+            
+            concorrentes.forEach((conc, idx) => {
+                const divAcoes = document.getElementById(`acoes-conc-${idx}`);
+                const btnRota = document.getElementById(`rota-maps-${idx}`);
+                if(!divAcoes || !btnRota) return;
+                
+                const cidadeConc = `${conc.local || ''} ${conc.cidade || ''} ${conc.uf || ''}`.trim();
+                const urlMaps = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(enderecoNovo)}&destination=${encodeURIComponent(cidadeConc)}`;
+                
+                btnRota.href = urlMaps;
+                
+                const msgMenos40 = `Olá ${ev.cliente}! Sou Luciano da Jazz Cinnamon. Temos outro evento na mesma data solicitada no seu pedido dia ${dataPt} (${diaSem}) pertinho do seu em ${conc.cidade || cidadeConc}. Estamos analisando a questão de logística para atendermos o seu evento com segurança.`;
+                const linkWppMenos40 = `https://wa.me/55${wppNum}?text=${encodeURIComponent(msgMenos40)}`;
+                
+                const msgMais40 = `Olá ${ev.cliente}! Sou Luciano da Jazz Cinnamon. Temos outro evento na mesma data solicitada no seu pedido dia ${dataPt} (${diaSem}) em ${conc.cidade || cidadeConc}. Estamos analisando a questão de viabilidade de logistica para atendermos ambos eventos com segurança.`;
+                const linkWppMais40 = `https://wa.me/55${wppNum}?text=${encodeURIComponent(msgMais40)}`;
+                
+                divAcoes.innerHTML = `
+                    <a href="${linkWppMenos40}" target="_blank" class="flex-1 bg-green-900/20 text-green-500 hover:bg-green-900/40 border border-green-900/50 text-[9px] px-1 py-2 rounded flex items-center justify-center gap-1 font-bold uppercase transition text-center leading-tight"><i data-lucide="message-circle" class="w-3 h-3"></i> Wpp < 40km</a>
+                    <a href="${linkWppMais40}" target="_blank" class="flex-1 bg-orange-900/20 text-orange-500 hover:bg-orange-900/40 border border-orange-900/50 text-[9px] px-1 py-2 rounded flex items-center justify-center gap-1 font-bold uppercase transition text-center leading-tight"><i data-lucide="message-circle" class="w-3 h-3"></i> Wpp > 40km</a>
+                `;
+            });
+            if(window.lucide) window.lucide.createIcons();
+        };
+
+        window.salvarLocalLogistica = async () => {
+            const ev = window.eventoConcorrenciaAtual;
+            if(!ev) return;
+            const novoLocal = document.getElementById('conc-local-novo').value;
+            
+            Swal.fire({title:'Salvando local...', didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff', allowOutsideClick: false});
+            
+            try {
+                // Update Firebase directly
+                await updateDoc(doc(db, "pedidos", ev.id), { local: novoLocal });
+                ev.local = novoLocal; 
+                
+                // Fire update to Google Calendar to ensure sync
+                if(ev.agendaId) {
+                    await fetch(URL_BACKEND, { 
+                        method: 'POST', 
+                        body: JSON.stringify({ 
+                            acao: "ATUALIZAR_DADOS_AGENDA", 
+                            agendaId: ev.agendaId, 
+                            dataStr: ev.dataStr, 
+                            horaInicio: ev.horaInicio, 
+                            horaTermino: window.horaTerminoCalculado(ev.horaInicio, ev.duracao), 
+                            duracao: ev.duracao,
+                            cliente: ev.cliente,
+                            tipo: ev.tipo,
+                            status: ev.status,
+                            local: novoLocal,
+                            cidade: ev.cidade,
+                            uf: ev.uf
+                        }) 
+                    });
+                }
+                
+                Swal.fire({icon: 'success', title: 'Local Salvo!', text: 'Atualizado no sistema e no Google Agenda.', timer: 2000, showConfirmButton: false, background: '#1a1d24'});
+                
+                // Silently refresh dashboard background data
+                window.processarFiltrosDashboard(); 
+            } catch(e) {
+                console.error(e);
+                Swal.fire('Erro', 'Não foi possível salvar o local.', 'error');
+            }
+        };
+
         // GESTÃO DE VIEWS
         window.alternarView = (v) => { document.querySelectorAll('.report-view, #view-dashboard').forEach(el => el.style.display = 'none'); document.getElementById('view-'+v).style.display = 'block'; window.fecharPaineis(); window.scrollTo(0,0); };
-        window.fecharPaineis = () => { document.getElementById('side-menu').classList.remove('open'); document.getElementById('menu-overlay').classList.remove('open'); };
+        window.fecharPaineis = () => { document.getElementById('side-menu').classList.remove('open'); document.getElementById('menu-overlay').classList.remove('open'); document.getElementById('side-notificacoes').classList.remove('open'); };
         window.abrirMenu = () => { document.getElementById('side-menu').classList.add('open'); document.getElementById('menu-overlay').classList.add('open'); };
+        window.abrirNotificacoes = () => { document.getElementById('side-notificacoes').classList.add('open'); document.getElementById('menu-overlay').classList.add('open'); };
         window.fazerLogout = async () => { await signOut(auth); window.location.reload(); };
+
+        window.carimbarEvento = () => {
+            // Futura implementação se necessário
+        };
 
         // RELATÓRIOS E AÇÕES BASE BLINDADAS
         window.abrirEdicaoUnificada = (id) => {
@@ -1108,11 +1613,27 @@
                 let cacheCesimbra = fundoProducao + roadieCusto + gasC;
                 let cacheLevi = fundoProducao + gasLevi;
 
+                // Captura a logo para não quebrar no celular (Fallbacks para segurança extrema)
+                let logoHtml = `<img src="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/logo%20preto%20(2).png?alt=media" crossorigin="anonymous" style="height: 40px; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto;">`;
+                try {
+                    const response = await fetch('https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/logo%20preto%20(2).png?alt=media');
+                    const blob = await response.blob();
+                    const base64 = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.readAsDataURL(blob);
+                    });
+                    logoHtml = `<img src="${base64}" style="height: 40px; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto;">`;
+                } catch (e) {
+                    console.warn("Aviso: Falha ao converter imagem por CORS. Usando fallback de texto.", e);
+                    logoHtml = `<h2 style="font-size: 18px; font-weight: 900; letter-spacing: 2px; margin: 0 0 10px 0;">JAZZ CINNAMON</h2>`;
+                }
+
                 // O CONTEÚDO HTML DO EXTRATO BANCÁRIO 
                 const extratoHTML = `
                     <div style="width: 260px; padding: 10px; background: #ffffff; color: #000000; font-family: 'Courier New', Courier, monospace; box-sizing: border-box; margin: 0 auto;">
                         <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px;">
-                            <img src="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/logo%20preto%20(2).png?alt=media" crossorigin="anonymous" style="height: 40px; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto;">
+                            ${logoHtml}
                             <h1 style="font-size: 13px; font-weight: bold; margin: 0; font-family: 'Montserrat', sans-serif;">PAGAMENTO DETALHADO</h1>
                             <p style="font-size: 10px; margin: 2px 0 8px 0;">EXTRATO DA BANDA</p>
                             
