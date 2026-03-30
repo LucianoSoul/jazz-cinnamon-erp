@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -219,7 +218,7 @@
                     <button onclick="window.gerarComparativo()" class="bg-[#d4af37] text-black hover:bg-[#b5952f] transition px-4 py-2 rounded text-xs font-bold ml-2">VER</button>
                 </div>
             </div>
-            <div class="bg-card p-4 rounded-xl shadow-lg relative w-full h-[400px]">
+            <div class="bg-card p-4 rounded-xl shadow-lg relative w-full h-[50vh] md:h-[400px] landscape:h-[85vh]">
                 <canvas id="graficoComparativo"></canvas>
             </div>
         </div>
@@ -238,7 +237,10 @@
                             </button>
                         </div>
                     </div>
-                    <h2 class="text-xl font-black text-white uppercase truncate pr-4" id="uni-nome">NOME DO CLIENTE</h2>
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-xl font-black text-white uppercase truncate" id="uni-nome">NOME DO CLIENTE</h2>
+                        <a href="#" id="uni-wpp-link" target="_blank" class="text-green-500 hover:text-green-400 transition hidden" title="Falar no WhatsApp"><i data-lucide="message-circle" class="w-5 h-5"></i></a>
+                    </div>
                     <p class="text-[10px] text-[#d4af37] mb-4 font-bold" id="uni-info-extra">Data: --/--/---- | Local</p>
                     
                     <div class="bg-[#1a1d24] border border-[#d4af37]/30 p-3 rounded-lg text-center relative overflow-hidden group">
@@ -464,8 +466,22 @@
 
         window.enviarDadosContador = (id) => { const ev = window.dadosGlobais.find(e => e.id === id); if(!ev || !ev.dadosNf) return; const nf = ev.dadosNf; const endereco = `${nf.endereco || ''}, ${nf.numero || ''}${nf.complemento ? ' - ' + nf.complemento : ''}, ${nf.bairro || ''}`; const textoWpp = `Oi Ketelin,\n\nVou precisar de mais uma nota fiscal. Seguem os dados:\n\n*Dados do Cliente*\nCNPJ ou CPF: ${nf.doc || ''}\nRazão Social ou Nome Completo: ${nf.nome || ''}\nEndereço Completo: ${endereco}\nCidade - Estado: ${nf.cidade || ''} - ${nf.uf || ''}\nCEP: ${nf.cep || ''}\nInscrição Estadual (IE): ${nf.ie || 'Isento'}\nInscrição Municipal (IM): ${nf.im || 'Isento'}\nE-mail: ${nf.email || ''}\n\n*Dados da Transação*\nDescrição do Serviço: ${nf.descricao || 'Prestação de Serviços Musicais'}\nValor Total: ${window.fmtMoeda(ev.valorNum)}\nLocal da Prestação: ${ev.cidade || ''} - ${ev.uf || ''}`; const urlWpp = `https://api.whatsapp.com/send?phone=555484188715&text=${encodeURIComponent(textoWpp)}`; window.open(urlWpp, '_blank'); };
 
+        window.enviarLinkNf = () => {
+            const id = document.getElementById('uni-id').value;
+            const ev = window.dadosGlobais.find(e => e.id === id);
+            if(!ev) return;
+            const wppNum = (ev.whatsapp || '').toString().replace(/\D/g, '');
+            if(!wppNum) {
+                Swal.fire({icon: 'info', title: 'Aviso', text: 'Cliente não possui WhatsApp cadastrado.', background: '#1a1d24', color: '#fff'});
+                return;
+            }
+            const msg = `Olá ${ev.cliente}, tudo bem?\n\nPara darmos andamento na emissão da sua nota fiscal, por favor, preencha os dados no link seguro abaixo:\n\nhttps://jazz-cinnamon-erp.web.app/form_nf?id=${String(ev.id).trim()}`;
+            const linkWpp = `https://wa.me/55${wppNum}?text=${encodeURIComponent(msg)}`;
+            window.open(linkWpp, '_blank');
+        };
+
         // === MOTOR DE CONEXÃO ===
-       window.iniciarConexao = async () => {
+        window.iniciarConexao = async () => {
             if(window.lucide) window.lucide.createIcons();
             const hoje = new Date();
             const selects = ['filtroMes', 'filtroAno', 'selMesInicioRel', 'selMesFimRel', 'selAnoRel', 'filtroMesFin', 'filtroAnoFin', 'compAno1', 'compAno2'];
@@ -746,11 +762,31 @@
 
             document.getElementById('contador-aba').innerText = `${filtrados.length} EVENTOS`;
             let html = '';
+            let currentMonth = -1; // Variável para controlar a quebra de mês
+
             filtrados.forEach(ev => {
                 const vPago = ev.valorPagoNum || 0; const vTotal = ev.valorNum || 0;
                 const percent = vTotal > 0 ? Math.min((vPago / vTotal) * 100, 100) : 0;
                 const dataPt = window.formatarDataExibicao(ev.dataStr);
                 const diaSem = window.getDiaSemana(ev.dataStr).toUpperCase();
+                
+                // Lógica do Mini Banner Separador de Mês (apenas quando "TODOS" está selecionado)
+                if (mes === 'todos') {
+                    const dEv = window.extrairAnoMes(ev.dataStr);
+                    const mesEv = dEv.mes ? parseInt(dEv.mes) : -1;
+                    if (mesEv !== -1 && mesEv !== currentMonth) {
+                        currentMonth = mesEv;
+                        const nomeMes = ["JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"][mesEv - 1];
+                        html += `
+                            <div class="w-full bg-[#111318] border border-[#d4af37]/30 text-[#d4af37] flex items-center justify-center gap-4 py-3 rounded-xl mb-5 shadow-lg">
+                                <div class="h-px bg-[#d4af37]/30 flex-1 ml-5"></div>
+                                <span class="font-black uppercase tracking-[0.25em] text-xs">${nomeMes}</span>
+                                <div class="h-px bg-[#d4af37]/30 flex-1 mr-5"></div>
+                            </div>
+                        `;
+                    }
+                }
+
                 let msgWpp = '';
                 if (ev.status === 'PRE_RESERVA') {
                     msgWpp = `Olá ${ev.cliente}! Eu sou o Luciano da Jazz Cinnamon.\n\nAcabei de receber em nosso sistema sua solicitação de orçamento para o dia *${dataPt}* em *${ev.cidade || 'LOCAL'} - ${ev.uf || 'UF'}*.\n\nVai chegar direto no seu e-mail. Quer receber por aqui também e continuamos conversando?`;
@@ -1025,6 +1061,13 @@
                 if(document.getElementById('uni-nome')) document.getElementById('uni-nome').innerText = ev.cliente || 'Sem Nome';
                 if(document.getElementById('uni-cliente-input')) document.getElementById('uni-cliente-input').value = ev.cliente || '';
 
+                const wppNum = (ev.whatsapp || '').toString().replace(/\D/g, '');
+                const btnWpp = document.getElementById('uni-wpp-link');
+                if(btnWpp) {
+                    if(wppNum) { btnWpp.href = `https://wa.me/55${wppNum}`; btnWpp.classList.remove('hidden'); }
+                    else btnWpp.classList.add('hidden');
+                }
+
                 const dataPt = window.formatarDataExibicao(ev.dataStr);
                 if(document.getElementById('uni-info-extra')) document.getElementById('uni-info-extra').innerText = `Data: ${dataPt} | ${ev.cidade || 'CIDADE'} - ${ev.uf || 'UF'}`;
                 
@@ -1120,6 +1163,12 @@
                         else if (vPagoRound > 0) statusPgtoSelect.value = 'SINAL PAGO';
                         else statusPgtoSelect.value = 'PENDENTE';
                     } else statusPgtoSelect.value = 'PENDENTE';
+                }
+
+                const btnLinkNf = document.getElementById('btn-link-nf');
+                if (btnLinkNf) {
+                    if (opNf !== "NÃO") btnLinkNf.classList.remove('hidden');
+                    else btnLinkNf.classList.add('hidden');
                 }
 
                 let percentualPago = 0; 
@@ -1255,8 +1304,62 @@
             if(btf) { btf.classList.toggle('text-[#d4af37]', t === 'fechamento'); btf.classList.toggle('border-b-2', t === 'fechamento'); }
         };
 
-        window.alterarStatus = async (id, s) => { try { await updateDoc(doc(db, "pedidos", id), {status: s}); } catch(e) { console.error(e); } };
-        window.reprovarEvento = async (id) => { const r = await Swal.fire({title: 'Excluir Evento?', text: 'Mover para Lixeira?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Sim, excluir', background:'#1a1d24', color:'#fff'}); if(r.isConfirmed) await updateDoc(doc(db, "pedidos", id), {status:'REPROVADO'}); };
+       window.alterarStatus = async (id, s) => { 
+            try { 
+                // 1. Atualiza instantaneamente no Firebase (UI reage na hora)
+                await updateDoc(doc(db, "pedidos", id), {status: s}); 
+                
+                // 2. Busca o evento e avisa o Google Agenda em segundo plano
+                const ev = window.dadosGlobais.find(e => e.id === id);
+                if (ev && ev.agendaId) {
+                    fetch(URL_BACKEND, { 
+                        method: 'POST', 
+                        body: JSON.stringify({ 
+                            acao: "ATUALIZAR_DADOS_AGENDA", 
+                            agendaId: ev.agendaId, 
+                            dataStr: ev.dataStr, 
+                            horaInicio: ev.horaInicio, 
+                            horaTermino: window.horaTerminoCalculado(ev.horaInicio, ev.duracao), 
+                            duracao: ev.duracao,
+                            cliente: ev.cliente,
+                            tipo: ev.tipo,
+                            status: s, // <-- O novo status que muda a cor na agenda
+                            local: ev.local || '',
+                            cidade: ev.cidade || '',
+                            uf: ev.uf || ''
+                        }) 
+                    }).catch(e => console.error("Erro silencioso ao atualizar Agenda:", e));
+                }
+            } catch(e) { 
+                console.error(e); 
+            } 
+        };
+        
+        window.reprovarEvento = async (id) => { 
+            const ev = window.dadosGlobais.find(e => e.id === id);
+            const r = await Swal.fire({title: 'Excluir Evento?', text: 'Mover para Lixeira e remover da Agenda?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Sim, excluir', cancelButtonText: 'Cancelar', background:'#1a1d24', color:'#fff'}); 
+            
+            if(r.isConfirmed) {
+                Swal.fire({title:'A excluir...', didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff', allowOutsideClick: false});
+                try {
+                    // 1. Atualiza no Firebase
+                    await updateDoc(doc(db, "pedidos", id), {status:'REPROVADO'}); 
+                    
+                    // 2. Remove do Google Agenda (dispara comandos para o Apps Script)
+                    if (ev && ev.agendaId) {
+                        // Envia o comando explícito de exclusão
+                        await fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify({ acao: "EXCLUIR_EVENTO_AGENDA", agendaId: ev.agendaId }) }).catch(()=>{});
+                        // Envia atualização de status para REPROVADO como redundância de segurança para o seu Script
+                        await fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify({ acao: "ATUALIZAR_DADOS_AGENDA", agendaId: ev.agendaId, status: 'REPROVADO' }) }).catch(()=>{});
+                    }
+                    
+                    Swal.fire({icon: 'success', title: 'Excluído!', timer: 1500, showConfirmButton: false, background: '#1a1d24'});
+                } catch(e) {
+                    console.error(e);
+                    Swal.fire('Erro', 'Falha ao excluir o evento.', 'error');
+                }
+            } 
+        };
         
         window.salvarUnificado = async (modoPdf) => { 
             try {
@@ -1920,7 +2023,7 @@
             if(window.lucide) window.lucide.createIcons();
         };
 
-          window.gerarRelatorio = () => {
+        window.gerarRelatorio = () => {
             const mesIni = parseInt(document.getElementById('selMesInicioRel').value) || 1;
             const mesFim = parseInt(document.getElementById('selMesFimRel').value) || 12;
             const ano = document.getElementById('selAnoRel').value;
@@ -1976,9 +2079,9 @@
                     const percent = faturamentoTotal > 0 ? ((c.valor / faturamentoTotal) * 100).toFixed(1) : 0; 
                     const widthBar = (c.valor / maxVal) * 100; 
                     html += `
-                    <div class="bg-[#111318] p-4 rounded-xl border border-[#2a2e39] cursor-pointer hover:border-[#d4af37] transition shadow-md mb-4" onclick="window.abrirDetalhesCategoria('${c.nome}', ${mesIni}, ${mesFim}, '${ano}')">
+                    <div class="bg-[#111318] p-4 rounded-xl border border-[#2a2e39] cursor-pointer hover:border-[#d4af37] transition shadow-md mb-4 group" onclick="window.abrirDetalhesCategoria('${c.nome}', ${mesIni}, ${mesFim}, '${ano}')">
                         <div class="flex justify-between items-end mb-2">
-                            <span class="text-xs font-bold text-white uppercase flex items-center gap-2">${c.nome} <i data-lucide="external-link" class="w-3 h-3 text-gray-500"></i></span>
+                            <span class="text-xs font-bold text-white uppercase flex items-center gap-2">${c.nome} <i data-lucide="external-link" class="w-3 h-3 text-gray-500 group-hover:text-[#d4af37] transition"></i></span>
                             <div class="text-right">
                                 <span class="block font-bold text-[#d4af37] text-sm">${window.fmtMoeda_n(c.valor)}</span>
                                 <span class="text-[9px] text-gray-500 font-mono">(${percent}%)</span>
@@ -1999,7 +2102,7 @@
             }); 
             document.getElementById('container-vips').innerHTML = vipHtml || '<p class="text-[10px] text-center text-gray-500 italic py-5">Nenhum cliente no ranking.</p>'; 
             
-            if(window.lucide) lucide.createIcons();
+            if(window.lucide) window.lucide.createIcons();
         };
 
         window.abrirDetalhesCategoria = (tipo, mesIni, mesFim, ano) => {
@@ -2050,9 +2153,8 @@
                 showConfirmButton: false, showCloseButton: true,
                 customClass: { popup: 'border border-[#2a2e39] rounded-xl shadow-2xl' }
             });
-            setTimeout(() => { if(window.lucide) lucide.createIcons(); }, 100);
+            setTimeout(() => { if(window.lucide) window.lucide.createIcons(); }, 100);
         };
-
 
         window.carregarFinanceiroGeral = () => {
             const mes = document.getElementById('filtroMesFin').value;
