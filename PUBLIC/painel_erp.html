@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -66,6 +67,13 @@
             0%, 100% { transform: scale(1.02); box-shadow: 0 0 15px rgba(212,175,55,0.3); border-color: #d4af37; }
             50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(212,175,55,0.6); border-color: #fde047; }
         }
+        
+        /* Oculta views na impressão */
+        @media print {
+            body * { visibility: hidden; }
+            .print-visible, .print-visible * { visibility: visible; }
+            .print-visible { position: absolute; left: 0; top: 0; width: 100%; }
+        }
     </style>
 </head>
 <body>
@@ -80,6 +88,7 @@
         </div>
         <div class="space-y-2">
             <button onclick="window.alternarView('dashboard')" class="w-full text-left p-3 rounded-md hover:bg-[#2a2e39] transition text-sm flex items-center gap-3 text-gray-300"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard</button>
+            <button onclick="window.alternarView('agenda')" class="w-full text-left p-3 rounded-md hover:bg-[#2a2e39] transition text-sm flex items-center gap-3 text-gray-300"><i data-lucide="users" class="w-4 h-4"></i> Agenda / CRM</button>
             <button onclick="window.alternarView('financeiro')" class="w-full text-left p-3 rounded-md hover:bg-[#2a2e39] transition text-sm flex items-center gap-3 text-gray-300"><i data-lucide="dollar-sign" class="w-4 h-4"></i> Financeiro</button>
             <button onclick="window.alternarView('relatorio')" class="w-full text-left p-3 rounded-md hover:bg-[#2a2e39] transition text-sm flex items-center gap-3 text-gray-300"><i data-lucide="bar-chart-2" class="w-4 h-4"></i> Performance</button>
             <button onclick="window.alternarView('comparativo')" class="w-full text-left p-3 rounded-md hover:bg-[#2a2e39] transition text-sm flex items-center gap-3 text-gray-300"><i data-lucide="bar-chart" class="w-4 h-4"></i> Desempenho Mensal</button>
@@ -97,7 +106,7 @@
             <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300 flex items-center gap-2"><i data-lucide="bell" class="w-4 h-4 text-[#d4af37]"></i> Notificações</h2>
             <button onclick="window.fecharPaineis()" class="text-gray-500 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
         </div>
-        <div id="lista-notificacoes" class="space-y-3 overflow-x-hidden"></div>
+        <div id="lista-notificacoes" class="space-y-3 overflow-x-hidden pb-20"></div>
     </div>
 
     <!-- HEADER -->
@@ -140,15 +149,84 @@
             </div>
         </div>
 
-        <!-- RELATÓRIOS -->
-        <div id="view-financeiro" class="report-view"> <h2 class="text-sm font-bold text-emerald-500 uppercase tracking-widest mb-6">Resumo Financeiro</h2> <div id="fin-geral-content" class="space-y-6 pb-20"></div> </div>
-        <div id="view-relatorio" class="report-view"> <h2 class="text-sm font-bold gold-text uppercase tracking-widest mb-6">Performance BI</h2> <div id="relatorio-bi-content" class="space-y-6"></div> </div>
-        <div id="view-comparativo" class="report-view"> <h2 class="text-sm font-bold gold-text uppercase tracking-widest mb-6">Desempenho Mensal</h2> <div class="bg-card p-4 h-[50vh]"><canvas id="graficoComparativo"></canvas></div> </div>
-        <div id="view-relatorio-recebiveis" class="report-view"> <h2 class="text-sm font-bold text-[#d4af37] uppercase tracking-widest mb-6">Recebíveis</h2> <div id="lista-recebiveis" class="space-y-4 pb-20"></div> </div>
+        <!-- AGENDA CRM -->
+        <div id="view-agenda" class="report-view">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-sm font-bold text-[#d4af37] uppercase tracking-widest">Agenda de Contatos</h2>
+            </div>
+            <div class="bg-card p-3 mb-6 flex gap-2">
+                <select id="ordemAgenda" onchange="window.renderAgendaFrontend()" class="input-erp flex-1 text-xs">
+                    <option value="dataAsc">Próximos Eventos</option>
+                    <option value="nomeAsc">Ordem Alfabética (A-Z)</option>
+                </select>
+                <button onclick="window.filtrarExpirados()" id="btnFiltroExp" class="btn-neutral px-3 text-[10px] uppercase font-bold" title="Mostrar Orçamentos Expirados">Expirados</button>
+            </div>
+            <div id="lista-agenda" class="space-y-3 pb-10"></div>
+        </div>
+
+        <!-- RELATÓRIO BI -->
+        <div id="view-relatorio" class="report-view">
+            <h2 class="text-sm font-bold gold-text uppercase tracking-widest mb-6">Performance</h2>
+            <div class="bg-card p-4 mb-6">
+                <div class="flex gap-2 justify-center items-center flex-wrap sm:flex-nowrap">
+                    <select id="selMesInicioRel" class="input-erp text-xs flex-1"></select>
+                    <span class="text-gray-500 text-xs font-bold uppercase tracking-widest">até</span>
+                    <select id="selMesFimRel" class="input-erp text-xs flex-1"></select>
+                    <select id="selAnoRel" class="input-erp text-xs w-24"></select>
+                    <button onclick="window.gerarRelatorio()" class="bg-[#d4af37] text-black hover:bg-[#b5952f] transition px-4 py-2 rounded text-xs font-bold">OK</button>
+                </div>
+            </div>
+            <div class="text-center mb-8">
+                <p id="txt-periodo-display" class="text-[10px] text-gray-500 uppercase tracking-widest">Faturamento Confirmado</p>
+                <h1 class="text-3xl font-bold text-white mt-1" id="fat-total-display">R$ 0,00</h1>
+            </div>
+            <div class="mb-8"><h3 class="text-xs font-bold text-gray-400 uppercase mb-4 border-b border-gray-800 pb-2">Volume de Eventos</h3><div id="container-qtd-tipos" class="grid grid-cols-3 gap-3"></div></div>
+            <div><h3 class="text-xs font-bold text-gray-400 uppercase mb-4 border-b border-gray-800 pb-2">Faturamento por Categoria</h3><div id="container-categorias" class="space-y-6"><div class="text-center py-10 opacity-50"><div class="loader"></div></div></div></div>
+            <div><h3 class="text-xs font-bold text-gray-400 uppercase mb-4 border-b border-gray-800 pb-2 mt-8">Top Clientes VIP</h3><div id="container-vips" class="space-y-3 pb-10"></div></div>
+        </div>
+
+        <!-- FINANCEIRO -->
+        <div id="view-financeiro" class="report-view">
+            <h2 class="text-sm font-bold text-emerald-500 uppercase tracking-widest mb-6">Resumo Financeiro</h2>
+            <div class="flex gap-2 mb-6">
+                <select id="filtroMesFin" onchange="window.carregarFinanceiroGeral()" class="input-erp text-xs flex-1"><option value="todos">TODOS</option><option value="1">JAN</option><option value="2">FEV</option><option value="3">MAR</option><option value="4">ABR</option><option value="5">MAI</option><option value="6">JUN</option><option value="7">JUL</option><option value="8">AGO</option><option value="9">SET</option><option value="10">OUT</option><option value="11">NOV</option><option value="12">DEZ</option></select>
+                <select id="filtroAnoFin" onchange="window.carregarFinanceiroGeral()" class="input-erp text-xs w-24"><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option></select>
+                <button onclick="window.carregarFinanceiroGeral()" class="btn-neutral p-2"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+                <button onclick="window.abrirRelatorioRecebiveis()" class="btn-neutral p-2" title="Relatório de Recebíveis"><i data-lucide="file-text" class="w-4 h-4"></i></button>
+            </div>
+            <div id="fin-geral-content" class="space-y-6 pb-20"><div class="text-center py-10"><div class="loader"></div></div></div>
+        </div>
+
+        <!-- RECEBÍVEIS -->
+        <div id="view-relatorio-recebiveis" class="report-view">
+            <button onclick="window.alternarView('financeiro')" class="text-gray-400 hover:text-white transition text-xs font-bold mb-6 flex items-center gap-2"><i data-lucide="arrow-left" class="w-4 h-4"></i> VOLTAR</button>
+            <h2 class="text-sm font-bold text-[#d4af37] uppercase tracking-widest mb-6">Relatório de Recebíveis</h2>
+            <div id="lista-recebiveis" class="space-y-4 pb-20"></div>
+        </div>
+
+        <!-- DESEMPENHO MENSAL / COMPARATIVO -->
+        <div id="view-comparativo" class="report-view">
+            <div class="flex justify-between items-center mb-6 pt-2">
+                <button onclick="window.alternarView('dashboard')" class="flex items-center gap-2 text-xs font-bold text-gray-400 hover:text-white transition"><i data-lucide="arrow-left" class="w-5 h-5"></i> VOLTAR</button>
+                <h2 class="text-sm font-bold gold-text uppercase tracking-widest">Desempenho Mensal</h2>
+            </div>
+            <div class="bg-card p-4 mb-6">
+                <div class="flex gap-2 justify-center items-center">
+                    <label class="text-[10px] text-gray-500 uppercase font-bold hidden sm:block">Ano:</label>
+                    <select id="compAno1" class="input-erp text-xs w-24"><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option></select>
+                    <label class="text-[10px] text-gray-500 uppercase font-bold ml-2">Vs:</label>
+                    <select id="compAno2" class="input-erp text-xs w-24"><option value="nenhum" selected>Nenhum</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option></select>
+                    <button onclick="window.gerarComparativo()" class="bg-[#d4af37] text-black hover:bg-[#b5952f] transition px-4 py-2 rounded text-xs font-bold ml-2">VER</button>
+                </div>
+            </div>
+            <div class="bg-card p-4 rounded-xl shadow-lg relative w-full h-[400px]">
+                <canvas id="graficoComparativo"></canvas>
+            </div>
+        </div>
     </main>
 
     <!-- MODAL UNIFICADO (EDIÇÃO E FINANCEIRO) -->
-    <div id="modal-unificado" class="modal-overlay hidden overflow-y-auto pt-10 pb-10 z-[60]">
+    <div id="modal-unificado" class="modal-overlay hidden overflow-y-auto pt-10 pb-10 z-[60]" onclick="if(event.target === this) window.fecharModalUnificado()">
         <div class="bg-[#1a1d24] p-0 rounded-xl border border-[#2a2e39] w-full max-w-lg m-auto shadow-2xl relative">
             <div class="bg-[#111318] p-6 border-b border-[#2a2e39] rounded-t-xl flex justify-between items-start">
                 <div class="w-full">
@@ -345,7 +423,7 @@
         window.animacaoInicialRodando = false;
         window.dadosJaCarregados = false;
         window.timeoutKpiAno = null;
-        window.deepLinkProcessado = false; // Controle de deep link (e-mail)
+        window.mostrarApenasExpirados = false;
 
         // UTILITÁRIOS
         window.safeNum = (val) => val ? (typeof val === 'number' ? val : parseFloat(String(val).replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]+/g, "")) || 0) : 0;
@@ -369,126 +447,49 @@
         window.formatarCpfCnpj = (i) => { let v = i.value.replace(/\D/g, ""); if (v.length <= 11) { v = v.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2"); } else { v = v.substring(0, 14).replace(/^(\d{2})(\d)/, "$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d)/, "$1-$2"); } i.value = v; };
         window.compilarAnexos = (ev) => { if(!ev) return []; let raw = []; if(ev.anexos) { if(Array.isArray(ev.anexos)) raw = [...ev.anexos]; else Object.values(ev.anexos).forEach(a => raw.push(a)); } return raw; };
 
-        // === SWIPE LOGIC (Cards Principais) ===
+        // === SWIPE LOGIC ===
         window.cardTouchStartX = 0; window.cardTouchStartY = 0;
         window.cardTouchStart = (e, el) => { if(e.touches && e.touches.length > 1) return; window.cardTouchStartX = e.touches ? e.touches[0].clientX : e.clientX; window.cardTouchStartY = e.touches ? e.touches[0].clientY : e.clientY; el.style.transition = 'none'; el.dataset.swiping = 'true'; };
         window.cardTouchMove = (e, el) => { if (el.dataset.swiping !== 'true') return; let currentX = e.touches ? e.touches[0].clientX : e.clientX; let currentY = e.touches ? e.touches[0].clientY : e.clientY; let diffX = currentX - window.cardTouchStartX; let diffY = currentY - window.cardTouchStartY; if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 10) { el.dataset.swiping = 'false'; el.style.transition = 'transform 0.3s ease-out'; el.style.transform = 'translateX(0)'; return; } if (e.cancelable) e.preventDefault(); let moveX = diffX; if(moveX > 120) moveX = 120 + (moveX - 120) * 0.2; if(moveX < -120) moveX = -120 + (moveX + 120) * 0.2; el.style.transform = `translateX(${moveX}px)`; };
         window.cardTouchEnd = (e, el, id) => { if (el.dataset.swiping !== 'true') return; el.dataset.swiping = 'false'; el.style.transition = 'transform 0.3s ease-out'; let currentX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX; let diffX = currentX - window.cardTouchStartX; if (diffX < -80) { el.style.transform = 'translateX(-120%)'; setTimeout(() => { window.reprovarEvento(id); el.style.transform = 'translateX(0)'; }, 200); } else if (diffX > 80) { el.style.transform = 'translateX(120%)'; setTimeout(() => { window.abrirEdicaoUnificada(id); el.style.transform = 'translateX(0)'; }, 200); } else { el.style.transform = 'translateX(0)'; } };
 
         // === SWIPE LOGIC (Notificações) ===
-        window.notifIsDragging = false;
-        window.notifStartX = 0;
-        window.notifStartY = 0;
+        window.notifIsDragging = false; window.notifStartX = 0; window.notifStartY = 0;
+        window.notifTouchStart = (e, el) => { if(e.type === 'touchstart' && e.touches && e.touches.length > 1) return; window.notifIsDragging = true; window.notifStartX = e.type.includes('mouse') ? e.pageX : e.touches[0].clientX; window.notifStartY = e.type.includes('mouse') ? e.pageY : e.touches[0].clientY; el.style.transition = 'none'; el.dataset.swiping = 'true'; el.dataset.moved = 'false'; };
+        window.notifTouchMove = (e, el) => { if (!window.notifIsDragging || el.dataset.swiping !== 'true') return; let currentX = e.type.includes('mouse') ? e.pageX : e.touches[0].clientX; let currentY = e.type.includes('mouse') ? e.pageY : e.touches[0].clientY; let diffX = currentX - window.notifStartX; let diffY = currentY - window.notifStartY; if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 10) { el.dataset.swiping = 'false'; window.notifIsDragging = false; el.style.transition = 'transform 0.3s ease-out'; el.style.transform = 'translateX(0)'; return; } if (Math.abs(diffX) > 5) el.dataset.moved = 'true'; if (e.cancelable) e.preventDefault(); let moveX = diffX; if(moveX > 100) moveX = 100 + (moveX - 100) * 0.2; if(moveX < -100) moveX = -100 + (moveX + 100) * 0.2; el.style.transform = `translateX(${moveX}px)`; };
+        window.notifTouchEnd = (e, el, key) => { if (!window.notifIsDragging || el.dataset.swiping !== 'true') return; el.dataset.swiping = 'false'; window.notifIsDragging = false; el.style.transition = 'transform 0.3s ease-out'; if (el.dataset.moved !== 'true') { el.style.transform = 'translateX(0)'; return; } let currentX = e.type.includes('mouse') ? e.pageX : (e.changedTouches ? e.changedTouches[0].clientX : window.notifStartX); let diffX = currentX - window.notifStartX; if (diffX < -60) { el.style.transform = 'translateX(-100%)'; setTimeout(() => { window.toggleNotifArchive(key); el.style.transform = 'translateX(0)'; }, 200); } else if (diffX > 60) { el.style.transform = 'translateX(100%)'; setTimeout(() => { window.toggleNotifPin(key); el.style.transform = 'translateX(0)'; }, 200); } else { el.style.transform = 'translateX(0)'; } };
 
-        window.notifTouchStart = (e, el) => {
-            if(e.type === 'touchstart' && e.touches && e.touches.length > 1) return;
-            window.notifIsDragging = true;
-            window.notifStartX = e.type.includes('mouse') ? e.pageX : e.touches[0].clientX;
-            window.notifStartY = e.type.includes('mouse') ? e.pageY : e.touches[0].clientY;
-            el.style.transition = 'none';
-            el.dataset.swiping = 'true';
-            el.dataset.moved = 'false';
-        };
+        window.toggleNotifArchive = (key) => { let state = JSON.parse(localStorage.getItem('jazz_notif_state')) || { archived: [], pinned: [] }; if(state.archived.includes(key)) { state.archived = state.archived.filter(k => k !== key); } else { state.archived.push(key); state.pinned = state.pinned.filter(k => k !== key); } localStorage.setItem('jazz_notif_state', JSON.stringify(state)); window.atualizarNotificacoes(); };
+        window.toggleNotifPin = (key) => { let state = JSON.parse(localStorage.getItem('jazz_notif_state')) || { archived: [], pinned: [] }; if(state.pinned.includes(key)) { state.pinned = state.pinned.filter(k => k !== key); } else { state.pinned.push(key); state.archived = state.archived.filter(k => k !== key); } localStorage.setItem('jazz_notif_state', JSON.stringify(state)); window.atualizarNotificacoes(); };
 
-        window.notifTouchMove = (e, el) => {
-            if (!window.notifIsDragging || el.dataset.swiping !== 'true') return;
-            let currentX = e.type.includes('mouse') ? e.pageX : e.touches[0].clientX;
-            let currentY = e.type.includes('mouse') ? e.pageY : e.touches[0].clientY;
-            let diffX = currentX - window.notifStartX;
-            let diffY = currentY - window.notifStartY;
-            
-            if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 10) {
-                el.dataset.swiping = 'false';
-                window.notifIsDragging = false;
-                el.style.transition = 'transform 0.3s ease-out';
-                el.style.transform = 'translateX(0)';
-                return;
-            }
-            
-            if (Math.abs(diffX) > 5) el.dataset.moved = 'true';
-            
-            if (e.cancelable) e.preventDefault();
-            let moveX = diffX;
-            if(moveX > 100) moveX = 100 + (moveX - 100) * 0.2;
-            if(moveX < -100) moveX = -100 + (moveX + 100) * 0.2;
-            el.style.transform = `translateX(${moveX}px)`;
-        };
-
-        window.notifTouchEnd = (e, el, key) => {
-            if (!window.notifIsDragging || el.dataset.swiping !== 'true') return;
-            el.dataset.swiping = 'false';
-            window.notifIsDragging = false;
-            el.style.transition = 'transform 0.3s ease-out';
-            
-            if (el.dataset.moved !== 'true') {
-                 el.style.transform = 'translateX(0)';
-                 return;
-            }
-
-            let currentX = e.type.includes('mouse') ? e.pageX : (e.changedTouches ? e.changedTouches[0].clientX : window.notifStartX);
-            let diffX = currentX - window.notifStartX;
-
-            if (diffX < -60) { // Arrasta p/ esquerda
-                el.style.transform = 'translateX(-100%)';
-                setTimeout(() => { window.toggleNotifArchive(key); el.style.transform = 'translateX(0)'; }, 200);
-            } else if (diffX > 60) { // Arrasta p/ direita
-                el.style.transform = 'translateX(100%)';
-                setTimeout(() => { window.toggleNotifPin(key); el.style.transform = 'translateX(0)'; }, 200);
-            } else {
-                el.style.transform = 'translateX(0)';
-            }
-        };
-
-        window.toggleNotifArchive = (key) => {
-            let state = JSON.parse(localStorage.getItem('jazz_notif_state')) || { archived: [], pinned: [] };
-            if(state.archived.includes(key)) {
-                state.archived = state.archived.filter(k => k !== key); // Restaura se já tava arquivado
-            } else {
-                state.archived.push(key); // Arquiva/Esmaece
-                state.pinned = state.pinned.filter(k => k !== key);
-            }
-            localStorage.setItem('jazz_notif_state', JSON.stringify(state));
-            window.atualizarNotificacoes(); 
-        };
-
-        window.toggleNotifPin = (key) => {
-            let state = JSON.parse(localStorage.getItem('jazz_notif_state')) || { archived: [], pinned: [] };
-            if(state.pinned.includes(key)) {
-                state.pinned = state.pinned.filter(k => k !== key); // Desafixa
-            } else {
-                state.pinned.push(key); // Fixa no Topo
-                state.archived = state.archived.filter(k => k !== key); 
-            }
-            localStorage.setItem('jazz_notif_state', JSON.stringify(state));
-            window.atualizarNotificacoes(); 
-        };
-
-        window.enviarDadosContador = (id) => {
-            const ev = window.dadosGlobais.find(e => e.id === id);
-            if(!ev || !ev.dadosNf) return;
-            const nf = ev.dadosNf;
-            const endereco = `${nf.endereco || ''}, ${nf.numero || ''}${nf.complemento ? ' - ' + nf.complemento : ''}, ${nf.bairro || ''}`;
-            const textoWpp = `Oi Ketelin,\n\nVou precisar de mais uma nota fiscal. Seguem os dados:\n\n*Dados do Cliente*\nCNPJ ou CPF: ${nf.doc || ''}\nRazão Social ou Nome Completo: ${nf.nome || ''}\nEndereço Completo: ${endereco}\nCidade - Estado: ${nf.cidade || ''} - ${nf.uf || ''}\nCEP: ${nf.cep || ''}\nInscrição Estadual (IE): ${nf.ie || 'Isento'}\nInscrição Municipal (IM): ${nf.im || 'Isento'}\nE-mail: ${nf.email || ''}\n\n*Dados da Transação*\nDescrição do Serviço: ${nf.descricao || 'Prestação de Serviços Musicais'}\nValor Total: ${window.fmtMoeda(ev.valorNum)}\nLocal da Prestação: ${ev.cidade || ''} - ${ev.uf || ''}`;
-            
-            const urlWpp = `https://api.whatsapp.com/send?phone=555484188715&text=${encodeURIComponent(textoWpp)}`;
-            window.open(urlWpp, '_blank');
-        };
+        window.enviarDadosContador = (id) => { const ev = window.dadosGlobais.find(e => e.id === id); if(!ev || !ev.dadosNf) return; const nf = ev.dadosNf; const endereco = `${nf.endereco || ''}, ${nf.numero || ''}${nf.complemento ? ' - ' + nf.complemento : ''}, ${nf.bairro || ''}`; const textoWpp = `Oi Ketelin,\n\nVou precisar de mais uma nota fiscal. Seguem os dados:\n\n*Dados do Cliente*\nCNPJ ou CPF: ${nf.doc || ''}\nRazão Social ou Nome Completo: ${nf.nome || ''}\nEndereço Completo: ${endereco}\nCidade - Estado: ${nf.cidade || ''} - ${nf.uf || ''}\nCEP: ${nf.cep || ''}\nInscrição Estadual (IE): ${nf.ie || 'Isento'}\nInscrição Municipal (IM): ${nf.im || 'Isento'}\nE-mail: ${nf.email || ''}\n\n*Dados da Transação*\nDescrição do Serviço: ${nf.descricao || 'Prestação de Serviços Musicais'}\nValor Total: ${window.fmtMoeda(ev.valorNum)}\nLocal da Prestação: ${ev.cidade || ''} - ${ev.uf || ''}`; const urlWpp = `https://api.whatsapp.com/send?phone=555484188715&text=${encodeURIComponent(textoWpp)}`; window.open(urlWpp, '_blank'); };
 
         // === MOTOR DE CONEXÃO ===
-        window.iniciarConexao = async () => {
+       window.iniciarConexao = async () => {
             if(window.lucide) window.lucide.createIcons();
             const hoje = new Date();
-            const selects = ['filtroMes', 'filtroAno', 'selMesRel', 'selAnoRel', 'filtroMesFin', 'filtroAnoFin', 'compAno1'];
+            const selects = ['filtroMes', 'filtroAno', 'selMesInicioRel', 'selMesFimRel', 'selAnoRel', 'filtroMesFin', 'filtroAnoFin', 'compAno1', 'compAno2'];
             selects.forEach(id => { 
                 const el = document.getElementById(id);
                 if(el) {
                     if(id.includes('Mes')) {
                         const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
-                        el.innerHTML = meses.map((n, i) => `<option value="${i+1}">${n.toUpperCase()}</option>`).join('');
-                        el.value = hoje.getMonth() + 1;
+                        let options = '';
+                        if(id === 'filtroMes' || id === 'filtroMesFin') options += '<option value="todos">TODOS</option>';
+                        options += meses.map((n, i) => `<option value="${i+1}">${n.toUpperCase()}</option>`).join('');
+                        el.innerHTML = options;
+                        
+                        if(id === 'selMesInicioRel') el.value = 1;
+                        else if(id === 'selMesFimRel') el.value = 12;
+                        else if(id === 'filtroMes' || id === 'filtroMesFin') el.value = hoje.getMonth() + 1;
                     } else if(id.includes('Ano')) {
-                        el.innerHTML = [2025, 2026, 2027].map(a => `<option value="${a}">${a}</option>`).join('');
-                        el.value = hoje.getFullYear();
+                        if (id === 'compAno2') {
+                            el.innerHTML = '<option value="nenhum">Nenhum</option>' + [2025, 2026, 2027].map(a => `<option value="${a}">${a}</option>`).join('');
+                            el.value = 'nenhum';
+                        } else {
+                            el.innerHTML = [2025, 2026, 2027].map(a => `<option value="${a}">${a}</option>`).join('');
+                            el.value = hoje.getFullYear();
+                        }
                     }
                 }
             });
@@ -521,7 +522,6 @@
                 const d = window.extrairAnoMes(ev.dataStr);
                 const dataEvFormatada = window.formatarDataExibicao(ev.dataStr);
                 
-                // Mapeamento dinâmico de concorrência para Avaliação de Logística
                 if (ev.status === 'PRE_RESERVA') {
                     ev.concorrentes = window.dadosGlobais.filter(outro => {
                         const dataOutroFormatada = window.formatarDataExibicao(outro.dataStr);
@@ -533,22 +533,16 @@
                 }
 
                 if (!ev.notificacaoOculta) {
-                    // 1. NOVO PEDIDO (Livre ou Concorrência)
-                    if (ev.status === 'PRE_RESERVA') {
+                    if (ev.dadosNf) {
+                        notificacoes.push({ ...ev, notifType: 'CONTABILIDADE', notifKey: ev.id + '_CONTAB' });
+                    } else if (ev.linkContrato && ev.linkContrato.trim() !== '') {
+                        notificacoes.push({ ...ev, notifType: 'NOVO_CONTRATO', notifKey: ev.id + '_CONTRATO' });
+                    } else if (ev.status === 'PRE_RESERVA') {
                         const hasConc = ev.concorrentes && ev.concorrentes.length > 0;
                         notificacoes.push({ ...ev, notifType: hasConc ? 'NOVO_CONC' : 'NOVO_LIMPO', notifKey: ev.id + '_NOVO' });
                     }
-                    // 2. NOVO CONTRATO ASSINADO
-                    else if (ev.linkContrato && ev.linkContrato.trim() !== '') {
-                        notificacoes.push({ ...ev, notifType: 'NOVO_CONTRATO', notifKey: ev.id + '_CONTRATO' });
-                    }
-                    // 3. DADOS DE CONTABILIDADE PREENCHIDOS
-                    else if (ev.dadosNf) {
-                        notificacoes.push({ ...ev, notifType: 'CONTABILIDADE', notifKey: ev.id + '_CONTABILIDADE' });
-                    }
                 }
                 
-                // Contabilidade dos KPIs Principais
                 if (d.ano === ano) {
                     if(ev.status === 'PRE_RESERVA') sAno.pre.qtd++;
                     if(ev.status === 'RESERVA') sAno.reserva.valor += ev.valorNum;
@@ -573,19 +567,6 @@
             } else {
                 window.renderPainelKpis(sMes, false); 
             }
-
-            // *** LÓGICA DE DEEP LINK (ABRIR PAINEL VIA E-MAIL) ***
-            if (!window.deepLinkProcessado) {
-                const urlParams = new URLSearchParams(window.location.search);
-                const evtId = urlParams.get('id');
-                if (evtId) {
-                    const evFound = window.dadosGlobais.find(e => String(e.id) === String(evtId));
-                    if (evFound) {
-                        window.deepLinkProcessado = true; // Impede que reabra em loop no Snapshot
-                        setTimeout(() => window.abrirEdicaoUnificada(evtId), 800);
-                    }
-                }
-            }
         };
 
         window.renderPainelKpis = (s, isAno = false) => {
@@ -605,9 +586,148 @@
             `).join('');
             if(window.lucide) window.lucide.createIcons();
             window.clicarKpi(window.abaAtual);
-            
-            // Chama a atualização das notificações ao final da renderização
-            window.atualizarNotificacoes();
+            window.atualizarNotificacoes(); 
+        };
+
+        window.atualizarNotificacoes = () => {
+            const badge = document.getElementById('badge-notificacao');
+            const lista = document.getElementById('lista-notificacoes');
+            const sino = document.getElementById('icone-sino');
+
+            let state = JSON.parse(localStorage.getItem('jazz_notif_state')) || { archived: [], pinned: [] };
+
+            if (window.notificacoesGlobais && window.notificacoesGlobais.length > 0) {
+                let activeCount = window.notificacoesGlobais.filter(n => !state.archived.includes(n.notifKey)).length;
+                
+                if (activeCount > 0) {
+                    badge.innerText = activeCount;
+                    badge.classList.remove('hidden');
+                    sino.classList.add('text-[#d4af37]', 'animate-pulse');
+                } else {
+                    badge.classList.add('hidden');
+                    sino.classList.remove('text-[#d4af37]', 'animate-pulse');
+                }
+
+                let sortedNotifs = [...window.notificacoesGlobais].sort((a, b) => {
+                    let aPin = state.pinned.includes(a.notifKey) ? 1 : 0;
+                    let bPin = state.pinned.includes(b.notifKey) ? 1 : 0;
+                    let aArch = state.archived.includes(a.notifKey) ? 1 : 0;
+                    let bArch = state.archived.includes(b.notifKey) ? 1 : 0;
+                    if (aArch !== bArch) return aArch - bArch; 
+                    if (aPin !== bPin) return bPin - aPin;     
+                    return 0; 
+                });
+
+                let html = '';
+                sortedNotifs.forEach(ev => {
+                    const dataPt = window.formatarDataExibicao(ev.dataStr);
+                    const isArchived = state.archived.includes(ev.notifKey);
+                    const isPinned = state.pinned.includes(ev.notifKey);
+
+                    let cardOpacity = isArchived ? 'opacity-40 grayscale hover:opacity-80 transition-opacity' : '';
+                    let pinBadge = isPinned && !isArchived ? '<span class="absolute -top-2 -right-2 text-lg drop-shadow-md z-30">📌</span>' : '';
+                    let borderClass = isPinned && !isArchived ? 'border-[#d4af37] shadow-[0_0_15px_rgba(212,175,55,0.2)]' : 'border-[#2a2e39]';
+
+                    let swipeWrapperStart = `
+                        <div class="relative mb-3 w-full" style="touch-action: pan-y;">
+                            <div class="absolute inset-0 flex justify-between items-center px-4 rounded-lg bg-[#0a0c10] shadow-inner">
+                                <div class="text-gray-500 font-black flex items-center gap-2 text-[9px] tracking-widest"><i data-lucide="archive" class="w-4 h-4"></i> ${isArchived ? 'RESTAURAR' : 'ESMAECER'}</div>
+                                <div class="text-[#d4af37] font-black flex items-center gap-2 text-[9px] tracking-widest"><i data-lucide="pin" class="w-4 h-4"></i> FIXAR TOPO</div>
+                            </div>
+                            <div class="bg-[#111318] p-3 rounded-lg border ${borderClass} relative z-10 w-full h-full ${cardOpacity}"
+                                 ontouchstart="window.notifTouchStart(event, this)" 
+                                 ontouchmove="window.notifTouchMove(event, this)" 
+                                 ontouchend="window.notifTouchEnd(event, this, '${ev.notifKey}')"
+                                 onmousedown="window.notifTouchStart(event, this)" 
+                                 onmousemove="window.notifTouchMove(event, this)" 
+                                 onmouseup="window.notifTouchEnd(event, this, '${ev.notifKey}')">
+                                ${pinBadge}
+                    `;
+                    let swipeWrapperEnd = `</div></div>`;
+
+                    if (ev.notifType === 'NOVO_LIMPO' || ev.notifType === 'NOVO_CONC') {
+                        const isLivre = ev.notifType === 'NOVO_LIMPO';
+                        const badgeStatus = isLivre 
+                            ? '<span class="bg-green-900/30 text-green-400 border border-green-900/50 text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">LIVRE</span>' 
+                            : '<span class="bg-amber-900/30 text-amber-500 border border-amber-900/50 text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Avaliar Logística</span>';
+                        
+                        const wppMsg = `Olá ${ev.cliente}! Acabamos de receber sua solicitaçao de orçamento para música ao vivo no seu evento dia ${dataPt}. Entraremos em contato o mais breve possível.`;
+                        const linkWpp = `https://wa.me/55${(ev.whatsapp || '').toString().replace(/\D/g, '')}?text=${encodeURIComponent(wppMsg)}`;
+                        
+                        const actionClick = isLivre ? `window.fecharPaineis(); window.abrirEdicaoUnificada('${ev.id}')` : `window.fecharPaineis(); window.abrirModalConcorrencia('${ev.id}')`;
+                        const animBlink = isLivre && !isArchived ? 'animate-pulse border-blue-400 text-blue-400' : 'border-blue-900/50 text-blue-500';
+
+                        html += swipeWrapperStart + `
+                                <div class="flex justify-between items-start mb-2 cursor-pointer pointer-events-auto" onclick="${actionClick}">
+                                    <span class="bg-blue-900/30 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase border flex items-center gap-1 ${animBlink}">
+                                        Novo Pedido
+                                    </span>
+                                    <span class="text-[9px] text-gray-500 font-mono">${dataPt}</span>
+                                </div>
+                                <div class="cursor-pointer pointer-events-auto" onclick="${actionClick}">
+                                    <p class="text-sm font-bold text-white truncate uppercase mb-0.5">${ev.cliente}</p>
+                                    <p class="text-[10px] text-gray-400 truncate mb-0.5"><i data-lucide="map-pin" class="w-3 h-3 inline"></i> ${ev.cidade || 'Cidade'} - ${ev.uf || 'UF'}</p>
+                                    <p class="text-[10px] text-gray-400 truncate mb-1"><i data-lucide="music" class="w-3 h-3 inline"></i> ${ev.tipo || 'Evento'} • <i data-lucide="users" class="w-3 h-3 inline"></i> ${ev.convidados || '?'} conv.</p>
+                                    <div class="flex justify-between items-center mt-2">
+                                        ${badgeStatus}
+                                        <span class="text-[8px] text-gray-500 uppercase tracking-widest flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">Visualizar <i data-lucide="chevron-right" class="w-3 h-3"></i></span>
+                                    </div>
+                                </div>
+                                <div class="mt-3 pt-3 border-t border-[#2a2e39] flex gap-2 pointer-events-auto relative z-20">
+                                    <a href="${linkWpp}" target="_blank" onclick="event.stopPropagation()" class="flex-1 bg-green-600/20 text-green-500 hover:bg-green-600/40 py-1.5 rounded transition flex items-center justify-center gap-1 text-[9px] font-bold uppercase border border-green-900/50">
+                                        <i data-lucide="message-circle" class="w-3 h-3"></i> WhatsApp
+                                    </a>
+                                </div>
+                        ` + swipeWrapperEnd;
+                    } 
+                    else if (ev.notifType === 'NOVO_CONTRATO') {
+                        const wppMsg = `Olá ${ev.cliente}, tudo bem? Recebemos a assinatura do contrato referente ao evento do dia ${dataPt}.`;
+                        const linkWpp = `https://wa.me/55${(ev.whatsapp || '').toString().replace(/\D/g, '')}?text=${encodeURIComponent(wppMsg)}`;
+                        const actionClick = `window.fecharPaineis(); window.abrirEdicaoUnificada('${ev.id}')`;
+
+                        html += swipeWrapperStart + `
+                                <div class="flex justify-between items-start mb-2 cursor-pointer pointer-events-auto" onclick="${actionClick}">
+                                    <span class="bg-purple-900/30 text-purple-400 border border-purple-900/50 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Novo Contrato</span>
+                                    <span class="text-[9px] text-gray-500 font-mono">${dataPt}</span>
+                                </div>
+                                <p class="text-sm font-bold text-white truncate uppercase mb-1 cursor-pointer pointer-events-auto" onclick="${actionClick}">${ev.cliente}</p>
+                                <p class="text-[9px] text-gray-400 font-bold uppercase mb-3">Contrato Assinado Preenchido</p>
+                                <div class="flex items-center gap-2 pointer-events-auto relative z-20">
+                                    <a href="${linkWpp}" target="_blank" onclick="event.stopPropagation()" class="flex-1 bg-green-600/20 text-green-500 hover:bg-green-600/40 py-1.5 rounded transition flex items-center justify-center gap-1 text-[9px] font-bold uppercase border border-green-900/50">
+                                        <i data-lucide="message-circle" class="w-3 h-3"></i> WhatsApp
+                                    </a>
+                                    <a href="${ev.linkContrato}" target="_blank" onclick="event.stopPropagation()" class="flex-none w-10 bg-[#d4af37] text-black hover:bg-[#b5952f] py-1.5 rounded transition flex items-center justify-center shadow-md">
+                                        <i data-lucide="eye" class="w-4 h-4"></i>
+                                    </a>
+                                </div>
+                        ` + swipeWrapperEnd;
+                    } 
+                    else if (ev.notifType === 'CONTABILIDADE') {
+                        const actionClick = `window.fecharPaineis(); window.abrirEdicaoUnificada('${ev.id}')`;
+                        html += swipeWrapperStart + `
+                                <div class="flex justify-between items-start mb-2 cursor-pointer pointer-events-auto" onclick="${actionClick}">
+                                    <span class="bg-gray-800 text-gray-300 border border-gray-600 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Contabilidade</span>
+                                    <span class="text-[9px] text-gray-500 font-mono">${dataPt}</span>
+                                </div>
+                                <p class="text-sm font-bold text-white truncate uppercase mb-0.5 cursor-pointer pointer-events-auto" onclick="${actionClick}">${ev.cliente}</p>
+                                <p class="text-[10px] text-gray-400 truncate mb-0.5">Local: ${ev.cidade || 'Cidade'} - ${ev.uf || 'UF'}</p>
+                                <p class="text-[10px] text-gray-400 truncate mb-3">Valor Total: ${window.fmtMoeda_n(ev.valorNum)}</p>
+                                <div class="flex items-center gap-2 pointer-events-auto relative z-20">
+                                    <button onclick="event.stopPropagation(); window.enviarDadosContador('${ev.id}')" class="flex-1 bg-green-600/20 text-green-500 hover:bg-green-600/40 py-1.5 rounded transition flex items-center justify-center gap-1 text-[9px] font-bold uppercase border border-green-900/50">
+                                        <i data-lucide="message-circle" class="w-3 h-3"></i> Enviar p/ Contabilidade
+                                    </button>
+                                </div>
+                        ` + swipeWrapperEnd;
+                    }
+                });
+
+                lista.innerHTML = html;
+                if(window.lucide) window.lucide.createIcons();
+            } else {
+                badge.classList.add('hidden');
+                sino.classList.remove('text-[#d4af37]', 'animate-pulse');
+                lista.innerHTML = '<div class="text-center text-xs text-gray-500 mt-10">Nenhuma notificação no momento.</div>';
+            }
         };
 
         window.clicarKpi = (status) => {
@@ -695,156 +815,6 @@
             });
             document.getElementById('lista-eventos').innerHTML = html || '<p class="text-center py-20 text-gray-600 text-xs uppercase tracking-widest">Nada encontrado.</p>';
             if(window.lucide) window.lucide.createIcons();
-        };
-
-        window.atualizarNotificacoes = () => {
-            const badge = document.getElementById('badge-notificacao');
-            const lista = document.getElementById('lista-notificacoes');
-            const sino = document.getElementById('icone-sino');
-
-            let state = JSON.parse(localStorage.getItem('jazz_notif_state')) || { archived: [], pinned: [] };
-
-            if (window.notificacoesGlobais && window.notificacoesGlobais.length > 0) {
-                // Calcula ativas (não arquivadas)
-                let activeCount = window.notificacoesGlobais.filter(n => !state.archived.includes(n.notifKey)).length;
-                
-                if (activeCount > 0) {
-                    badge.innerText = activeCount;
-                    badge.classList.remove('hidden');
-                    sino.classList.add('text-[#d4af37]', 'animate-pulse');
-                } else {
-                    badge.classList.add('hidden');
-                    sino.classList.remove('text-[#d4af37]', 'animate-pulse');
-                }
-
-                // Ordenação: 1. Fixados -> 2. Normais -> 3. Arquivados (Esmaecidos)
-                let sortedNotifs = [...window.notificacoesGlobais].sort((a, b) => {
-                    let aPin = state.pinned.includes(a.notifKey) ? 1 : 0;
-                    let bPin = state.pinned.includes(b.notifKey) ? 1 : 0;
-                    let aArch = state.archived.includes(a.notifKey) ? 1 : 0;
-                    let bArch = state.archived.includes(b.notifKey) ? 1 : 0;
-
-                    if (aArch !== bArch) return aArch - bArch; 
-                    if (aPin !== bPin) return bPin - aPin;     
-                    return 0; 
-                });
-
-                let html = '';
-                sortedNotifs.forEach(ev => {
-                    const dataPt = window.formatarDataExibicao(ev.dataStr);
-                    const diaSem = window.getDiaSemana(ev.dataStr).toUpperCase();
-                    const isArchived = state.archived.includes(ev.notifKey);
-                    const isPinned = state.pinned.includes(ev.notifKey);
-
-                    let cardOpacity = isArchived ? 'opacity-40 grayscale hover:opacity-80 transition-opacity' : '';
-                    let pinBadge = isPinned && !isArchived ? '<span class="absolute -top-2 -right-2 text-lg drop-shadow-md z-30">📌</span>' : '';
-                    let borderClass = isPinned && !isArchived ? 'border-[#d4af37] shadow-[0_0_15px_rgba(212,175,55,0.2)]' : 'border-[#2a2e39]';
-
-                    // Estrutura Base de Arraste (Swipe)
-                    let swipeWrapperStart = `
-                        <div class="relative mb-3 w-full" style="touch-action: pan-y;">
-                            <div class="absolute inset-0 flex justify-between items-center px-4 rounded-lg bg-[#0a0c10] shadow-inner">
-                                <div class="text-gray-500 font-black flex items-center gap-2 text-[9px] tracking-widest"><i data-lucide="archive" class="w-4 h-4"></i> ${isArchived ? 'RESTAURAR' : 'ESMAECER'}</div>
-                                <div class="text-[#d4af37] font-black flex items-center gap-2 text-[9px] tracking-widest"><i data-lucide="pin" class="w-4 h-4"></i> FIXAR TOPO</div>
-                            </div>
-                            <div class="bg-[#111318] p-3 rounded-lg border ${borderClass} relative z-10 w-full h-full ${cardOpacity}"
-                                 ontouchstart="window.notifTouchStart(event, this)" 
-                                 ontouchmove="window.notifTouchMove(event, this)" 
-                                 ontouchend="window.notifTouchEnd(event, this, '${ev.notifKey}')"
-                                 onmousedown="window.notifTouchStart(event, this)" 
-                                 onmousemove="window.notifTouchMove(event, this)" 
-                                 onmouseup="window.notifTouchEnd(event, this, '${ev.notifKey}')">
-                                ${pinBadge}
-                    `;
-                    let swipeWrapperEnd = `</div></div>`;
-
-                    // CONTEÚDO DO CARD 1: NOVO PEDIDO (Livre ou Avaliar Logística)
-                    if (ev.notifType === 'NOVO_LIMPO' || ev.notifType === 'NOVO_CONC') {
-                        const isLivre = ev.notifType === 'NOVO_LIMPO';
-                        const badgeStatus = isLivre 
-                            ? '<span class="bg-green-900/30 text-green-400 border border-green-900/50 text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">LIVRE</span>' 
-                            : '<span class="bg-amber-900/30 text-amber-500 border border-amber-900/50 text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Avaliar Logística</span>';
-                        
-                        const wppMsg = `Olá ${ev.cliente}! Acabamos de receber sua solicitaçao de orçamento para música ao vivo no seu evento dia ${dataPt}. Entraremos em contato o mais breve possível.`;
-                        const linkWpp = `https://wa.me/55${(ev.whatsapp || '').toString().replace(/\D/g, '')}?text=${encodeURIComponent(wppMsg)}`;
-                        
-                        const actionClick = isLivre ? `window.fecharPaineis(); window.abrirEdicaoUnificada('${ev.id}')` : `window.fecharPaineis(); window.abrirModalConcorrencia('${ev.id}')`;
-                        const animBlink = isLivre && !isArchived ? 'animate-pulse border-blue-400 text-blue-400' : 'border-blue-900/50 text-blue-500';
-
-                        html += swipeWrapperStart + `
-                                <div class="flex justify-between items-start mb-2 cursor-pointer pointer-events-auto" onclick="${actionClick}">
-                                    <span class="bg-blue-900/30 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase border flex items-center gap-1 ${animBlink}">
-                                        Novo Pedido
-                                    </span>
-                                    <span class="text-[9px] text-gray-500 font-mono">${dataPt}</span>
-                                </div>
-                                <div class="cursor-pointer pointer-events-auto" onclick="${actionClick}">
-                                    <p class="text-sm font-bold text-white truncate uppercase mb-0.5">${ev.cliente}</p>
-                                    <p class="text-[10px] text-gray-400 truncate mb-0.5"><i data-lucide="map-pin" class="w-3 h-3 inline"></i> ${ev.cidade || 'Cidade'} - ${ev.uf || 'UF'}</p>
-                                    <p class="text-[10px] text-gray-400 truncate mb-1"><i data-lucide="music" class="w-3 h-3 inline"></i> ${ev.tipo || 'Evento'} • <i data-lucide="users" class="w-3 h-3 inline"></i> ${ev.convidados || '?'} conv.</p>
-                                    <div class="flex justify-between items-center mt-2">
-                                        ${badgeStatus}
-                                        <span class="text-[8px] text-gray-500 uppercase tracking-widest flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">Visualizar <i data-lucide="chevron-right" class="w-3 h-3"></i></span>
-                                    </div>
-                                </div>
-                                <div class="mt-3 pt-3 border-t border-[#2a2e39] flex gap-2 pointer-events-auto relative z-20">
-                                    <a href="${linkWpp}" target="_blank" onclick="event.stopPropagation()" class="flex-1 bg-green-600/20 text-green-500 hover:bg-green-600/40 py-1.5 rounded transition flex items-center justify-center gap-1 text-[9px] font-bold uppercase border border-green-900/50">
-                                        <i data-lucide="message-circle" class="w-3 h-3"></i> WhatsApp
-                                    </a>
-                                </div>
-                        ` + swipeWrapperEnd;
-                    } 
-                    // CARD 2: NOVO CONTRATO
-                    else if (ev.notifType === 'NOVO_CONTRATO') {
-                        const wppMsg = `Olá ${ev.cliente}, tudo bem? Recebemos a assinatura do contrato referente ao evento do dia ${dataPt}.`;
-                        const linkWpp = `https://wa.me/55${(ev.whatsapp || '').toString().replace(/\D/g, '')}?text=${encodeURIComponent(wppMsg)}`;
-                        const actionClick = `window.fecharPaineis(); window.abrirEdicaoUnificada('${ev.id}')`;
-
-                        html += swipeWrapperStart + `
-                                <div class="flex justify-between items-start mb-2 cursor-pointer pointer-events-auto" onclick="${actionClick}">
-                                    <span class="bg-purple-900/30 text-purple-400 border border-purple-900/50 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Novo Contrato</span>
-                                    <span class="text-[9px] text-gray-500 font-mono">${dataPt}</span>
-                                </div>
-                                <p class="text-sm font-bold text-white truncate uppercase mb-1 cursor-pointer pointer-events-auto" onclick="${actionClick}">${ev.cliente}</p>
-                                <p class="text-[9px] text-gray-400 font-bold uppercase mb-3">Contrato Assinado Preenchido</p>
-                                <div class="flex items-center gap-2 pointer-events-auto relative z-20">
-                                    <a href="${linkWpp}" target="_blank" onclick="event.stopPropagation()" class="flex-1 bg-green-600/20 text-green-500 hover:bg-green-600/40 py-1.5 rounded transition flex items-center justify-center gap-1 text-[9px] font-bold uppercase border border-green-900/50">
-                                        <i data-lucide="message-circle" class="w-3 h-3"></i> WhatsApp
-                                    </a>
-                                    <a href="${ev.linkContrato}" target="_blank" onclick="event.stopPropagation()" class="flex-none w-10 bg-[#d4af37] text-black hover:bg-[#b5952f] py-1.5 rounded transition flex items-center justify-center shadow-md">
-                                        <i data-lucide="eye" class="w-4 h-4"></i>
-                                    </a>
-                                </div>
-                        ` + swipeWrapperEnd;
-                    } 
-                    // CARD 3: CONTABILIDADE (Nota Fiscal)
-                    else if (ev.notifType === 'CONTABILIDADE') {
-                        const actionClick = `window.fecharPaineis(); window.abrirEdicaoUnificada('${ev.id}')`;
-                        
-                        html += swipeWrapperStart + `
-                                <div class="flex justify-between items-start mb-2 cursor-pointer pointer-events-auto" onclick="${actionClick}">
-                                    <span class="bg-gray-800 text-gray-300 border border-gray-600 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Contabilidade</span>
-                                    <span class="text-[9px] text-gray-500 font-mono">${dataPt}</span>
-                                </div>
-                                <p class="text-sm font-bold text-white truncate uppercase mb-0.5 cursor-pointer pointer-events-auto" onclick="${actionClick}">${ev.cliente}</p>
-                                <p class="text-[10px] text-gray-400 truncate mb-0.5">Local: ${ev.cidade || 'Cidade'} - ${ev.uf || 'UF'}</p>
-                                <p class="text-[10px] text-gray-400 truncate mb-3">Valor Total: ${window.fmtMoeda_n(ev.valorNum)}</p>
-                                <div class="flex items-center gap-2 pointer-events-auto relative z-20">
-                                    <button onclick="event.stopPropagation(); window.enviarDadosContador('${ev.id}')" class="flex-1 bg-green-600/20 text-green-500 hover:bg-green-600/40 py-1.5 rounded transition flex items-center justify-center gap-1 text-[9px] font-bold uppercase border border-green-900/50">
-                                        <i data-lucide="message-circle" class="w-3 h-3"></i> Enviar p/ Contabilidade
-                                    </button>
-                                </div>
-                        ` + swipeWrapperEnd;
-                    }
-                });
-
-                lista.innerHTML = html;
-                if(window.lucide) window.lucide.createIcons();
-            } else {
-                badge.classList.add('hidden');
-                sino.classList.remove('text-[#d4af37]', 'animate-pulse');
-                lista.innerHTML = '<div class="text-center text-xs text-gray-500 mt-10">Nenhuma notificação no momento.</div>';
-            }
         };
 
         window.abrirModalConcorrencia = (id) => {
@@ -1024,7 +994,12 @@
         };
 
         // GESTÃO DE VIEWS
-        window.alternarView = (v) => { document.querySelectorAll('.report-view, #view-dashboard').forEach(el => el.style.display = 'none'); document.getElementById('view-'+v).style.display = 'block'; window.fecharPaineis(); window.scrollTo(0,0); };
+        window.alternarView = (v) => { document.querySelectorAll('.report-view, #view-dashboard').forEach(el => el.style.display = 'none'); document.getElementById('view-'+v).style.display = 'block'; window.fecharPaineis(); window.scrollTo(0,0); 
+            if(v === 'agenda') window.carregarAgenda();
+            if(v === 'relatorio') window.gerarRelatorio();
+            if(v === 'financeiro') window.carregarFinanceiroGeral();
+            if(v === 'comparativo') window.gerarComparativo();
+        };
         window.fecharPaineis = () => { document.getElementById('side-menu').classList.remove('open'); document.getElementById('menu-overlay').classList.remove('open'); document.getElementById('side-notificacoes').classList.remove('open'); };
         window.abrirMenu = () => { document.getElementById('side-menu').classList.add('open'); document.getElementById('menu-overlay').classList.add('open'); };
         window.abrirNotificacoes = () => { document.getElementById('side-notificacoes').classList.add('open'); document.getElementById('menu-overlay').classList.add('open'); };
@@ -1377,10 +1352,7 @@
         };
 
         window.salvarDiretoAgenda = (id) => { Swal.fire({title:'Sincronizando...', didOpen:()=>Swal.showLoading(), background:'#1a1d24'}); setTimeout(()=>Swal.fire({icon:'success', title:'Agenda Sincronizada', background:'#1a1d24'}), 1500); };
-        window.gerarRelatorio = () => { window.alternarView('relatorio'); }; 
-        window.carregarFinanceiroGeral = () => { window.alternarView('financeiro'); }; 
-        window.renderAgendaFrontend = () => { window.alternarView('agenda'); };
-
+        
         // === DOCUMENTOS E ANEXOS ===
         window.excluirAnexo = async (id, index, urlAnexo) => {
             const ev = window.dadosGlobais.find(e => e.id === id);
@@ -1861,6 +1833,484 @@
                 console.error(e);
                 Swal.fire('Erro', 'Não foi possível gerar e enviar o extrato. Tente novamente.', 'error');
             }
+        };
+
+        // ==========================================
+        // 1. GESTÃO DE VIEWS (MENU HAMBÚRGUER) E RELATÓRIOS
+        // ==========================================
+        window.mostrarApenasExpirados = false;
+        
+        window.filtrarExpirados = () => {
+            window.mostrarApenasExpirados = !window.mostrarApenasExpirados;
+            const btn = document.getElementById('btnFiltroExp');
+            if(window.mostrarApenasExpirados) { btn.classList.add('bg-[#d4af37]', 'text-black'); btn.classList.remove('text-gray-400'); } 
+            else { btn.classList.remove('bg-[#d4af37]', 'text-black'); btn.classList.add('text-gray-400'); }
+            window.renderAgendaFrontend();
+        };
+
+        window.carregarAgenda = () => { window.renderAgendaFrontend(); };
+
+        window.renderAgendaFrontend = () => {
+            const ordem = document.getElementById('ordemAgenda').value;
+            const hoje = new Date(); hoje.setHours(0,0,0,0);
+            
+            let contatosMap = {};
+            window.dadosGlobais.forEach(ev => {
+                if (ev.status === 'CONFIRMADO' || ev.status === 'REPROVADO' || ev.status === 'LIXEIRA') return;
+                
+                const dStr = ev.dataStr;
+                if(!dStr) return;
+                const parts = dStr.split('-');
+                let dtObj = null;
+                if(parts.length === 3) {
+                    if (parts[0].length === 4) dtObj = new Date(parts[0], parts[1]-1, parts[2]); // YYYY-MM-DD
+                    else dtObj = new Date(parts[2], parts[1]-1, parts[0]); // DD-MM-YYYY
+                }
+                if(!dtObj || dtObj < hoje) return; 
+                
+                let isExp = false;
+                let atraso = 0;
+                
+                // Avalia expirado (se tem 30 dias ou mais na fila e não fechou)
+                if (ev.criadoEm && ev.criadoEm.toDate) {
+                    const dtCriacao = ev.criadoEm.toDate();
+                    const dtExp = new Date(dtCriacao); dtExp.setDate(dtExp.getDate() + 30);
+                    atraso = Math.ceil((hoje - dtExp)/(1000*60*60*24));
+                    if (atraso > 0) isExp = true;
+                }
+                
+                if(!contatosMap[ev.cliente]) {
+                    contatosMap[ev.cliente] = { nome: ev.cliente, whatsapp: ev.whatsapp, eventos: [], dataObj: dtObj, isExp: false, atrasoMax: 0 };
+                }
+                contatosMap[ev.cliente].eventos.push({ data: window.formatarDataExibicao(ev.dataStr), status: ev.status });
+                if (isExp) {
+                    contatosMap[ev.cliente].isExp = true;
+                    if(atraso > contatosMap[ev.cliente].atrasoMax) contatosMap[ev.cliente].atrasoMax = atraso;
+                }
+            });
+            
+            let lista = Object.values(contatosMap);
+            if(window.mostrarApenasExpirados) lista = lista.filter(c => c.isExp);
+            
+            if(ordem === 'dataAsc') lista.sort((a,b) => a.dataObj - b.dataObj);
+            else if (ordem === 'nomeAsc') lista.sort((a,b) => a.nome.localeCompare(b.nome));
+
+            let html = "";
+            lista.forEach(c => {
+                let evHtml = "";
+                c.eventos.forEach(ev => {
+                    let color = ev.status === 'CONFIRMADO' ? 'border-[#10b981]' : (ev.status === 'RESERVA' ? 'border-[#f59e0b]' : 'border-[#3b82f6]');
+                    let lbl = ev.status === 'PRE_RESERVA' ? 'PRÉ-RESERVA' : ev.status;
+                    evHtml += `<span class="text-[9px] text-gray-300 bg-[#111318] border-l-2 ${color} px-1.5 py-0.5 rounded mr-1 mb-1 inline-block">${ev.data} <span class="opacity-50 ml-1">• ${lbl}</span></span>`;
+                });
+
+                let link, iCls;
+                if(c.isExp) {
+                    link = `https://wa.me/55${(c.whatsapp || '').toString().replace(/\D/g,'')}?text=${encodeURIComponent(`Olá ${c.nome}! Aqui é o Luciano da Jazz Cinnamon. Estou entrando em contato para saber se já conseguiu avaliar nosso orçamento. Podemos avançar?`)}`;
+                    iCls = "text-[#f59e0b]"; 
+                } else {
+                    link = `https://wa.me/55${(c.whatsapp || '').toString().replace(/\D/g,'')}?text=${encodeURIComponent(`Olá ${c.nome}, tudo bem?`)}`;
+                    iCls = "text-gray-400";
+                }
+                let alert = c.isExp ? `<p class="text-[9px] text-[#f59e0b] mt-2 font-bold"><i data-lucide="alert-circle" class="w-3 h-3 inline"></i> Orçamento expirado há ${c.atrasoMax} dias.</p>` : "";
+
+                html += `<div class="bg-card p-4 card-animado mb-3 flex justify-between items-center border border-[#2a2e39]"><div class="flex-1 overflow-hidden"><h4 class="text-sm font-bold text-gray-200 mb-2 truncate">${c.nome}</h4><div class="flex flex-wrap">${evHtml}</div>${alert}</div><a href="${link}" target="_blank" class="btn-neutral p-3 ml-3 flex-shrink-0 bg-[#111318] border border-[#2a2e39]"><i data-lucide="message-circle" class="w-5 h-5 ${iCls}"></i></a></div>`;
+            });
+            document.getElementById('lista-agenda').innerHTML = html || '<div class="text-center text-xs text-gray-500 py-10">Nenhum contato encontrado.</div>';
+            if(window.lucide) window.lucide.createIcons();
+        };
+
+          window.gerarRelatorio = () => {
+            const mesIni = parseInt(document.getElementById('selMesInicioRel').value) || 1;
+            const mesFim = parseInt(document.getElementById('selMesFimRel').value) || 12;
+            const ano = document.getElementById('selAnoRel').value;
+            
+            let faturamentoTotal = 0;
+            const categoriasMap = {};
+            const tiposQtd = {};
+            const vipMap = {};
+            
+            window.dadosGlobais.forEach(ev => {
+                if (ev.status !== 'CONFIRMADO') return;
+                
+                const d = window.extrairAnoMes(ev.dataStr);
+                if (d.ano !== ano) return;
+                
+                const mesEv = parseInt(d.mes);
+                if (mesEv < mesIni || mesEv > mesFim) return;
+                
+                faturamentoTotal += ev.valorNum || 0;
+                
+                const tipo = (ev.tipo || 'OUTROS').toUpperCase();
+                categoriasMap[tipo] = (categoriasMap[tipo] || 0) + (ev.valorNum || 0);
+                
+                tiposQtd[tipo] = (tiposQtd[tipo] || 0) + 1;
+                
+                const cli = (ev.cliente || 'DESCONHECIDO').toUpperCase();
+                vipMap[cli] = (vipMap[cli] || 0) + (ev.valorNum || 0);
+            });
+            
+            const mesesNomes = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"];
+            const txtPeriodo = mesIni === mesFim ? `${mesesNomes[mesIni-1]} DE ${ano}` : `${mesesNomes[mesIni-1]} a ${mesesNomes[mesFim-1]} DE ${ano}`; 
+            document.getElementById('txt-periodo-display').innerText = txtPeriodo; 
+            
+            document.getElementById('fat-total-display').innerText = window.fmtMoeda_n(faturamentoTotal);
+            
+            const arrTipos = Object.keys(tiposQtd).map(k => ({nome: k, qtd: tiposQtd[k]})).sort((a,b)=>b.qtd - a.qtd);
+            document.getElementById('container-qtd-tipos').innerHTML = arrTipos.map(t => `
+                <div class="bg-[#111318] p-2 rounded border border-[#2a2e39] text-center shadow-inner">
+                    <h5 class="text-xl font-black text-white">${t.qtd}</h5>
+                    <p class="text-[8px] uppercase tracking-wider text-[#d4af37] font-bold truncate mt-1">${t.nome}</p>
+                </div>
+            `).join('') || '<div class="col-span-3 text-center text-[10px] text-gray-500 italic">Sem dados no período.</div>';
+            
+            const containerCat = document.getElementById('container-categorias');
+            const catsOrdenadas = Object.keys(categoriasMap).map(k => ({nome: k, valor: categoriasMap[k]})).sort((a,b) => b.valor - a.valor);
+            
+            if (catsOrdenadas.length === 0) { 
+                containerCat.innerHTML = `<div class="text-center text-gray-500 text-xs py-10 italic">Nenhum faturamento confirmado neste período.</div>`; 
+            } else {
+                const maxVal = Math.max(...catsOrdenadas.map(c => c.valor)); 
+                let html = ""; 
+                catsOrdenadas.forEach(c => { 
+                    const percent = faturamentoTotal > 0 ? ((c.valor / faturamentoTotal) * 100).toFixed(1) : 0; 
+                    const widthBar = (c.valor / maxVal) * 100; 
+                    html += `
+                    <div class="bg-[#111318] p-4 rounded-xl border border-[#2a2e39] cursor-pointer hover:border-[#d4af37] transition shadow-md mb-4" onclick="window.abrirDetalhesCategoria('${c.nome}', ${mesIni}, ${mesFim}, '${ano}')">
+                        <div class="flex justify-between items-end mb-2">
+                            <span class="text-xs font-bold text-white uppercase flex items-center gap-2">${c.nome} <i data-lucide="external-link" class="w-3 h-3 text-gray-500"></i></span>
+                            <div class="text-right">
+                                <span class="block font-bold text-[#d4af37] text-sm">${window.fmtMoeda_n(c.valor)}</span>
+                                <span class="text-[9px] text-gray-500 font-mono">(${percent}%)</span>
+                            </div>
+                        </div>
+                        <div class="w-full bg-[#1a1d24] rounded-full h-2 border border-[#2a2e39] overflow-hidden">
+                            <div class="bg-[#d4af37] h-full rounded-full shadow-[0_0_8px_rgba(212,175,55,0.6)]" style="width: ${widthBar}%"></div>
+                        </div>
+                    </div>`; 
+                }); 
+                containerCat.innerHTML = html; 
+            }
+
+            const vipsOrdenados = Object.keys(vipMap).map(k => ({nome: k, faturamento: vipMap[k]})).sort((a,b) => b.faturamento - a.faturamento).slice(0, 10);
+            let vipHtml = ""; 
+            vipsOrdenados.forEach((v, i) => { 
+                vipHtml += `<div class="flex justify-between items-center text-[10px] bg-[#111318] p-3 rounded border border-[#2a2e39] shadow-inner mb-2 hover:border-[#d4af37] transition"><div class="flex items-center gap-3"><span class="font-black text-[#d4af37] bg-[#d4af37]/10 px-1.5 py-0.5 rounded">${i+1}º</span><span class="text-gray-300 font-bold uppercase truncate max-w-[150px]">${v.nome}</span></div><span class="font-black text-white text-xs">${window.fmtMoeda_n(v.faturamento)}</span></div>`; 
+            }); 
+            document.getElementById('container-vips').innerHTML = vipHtml || '<p class="text-[10px] text-center text-gray-500 italic py-5">Nenhum cliente no ranking.</p>'; 
+            
+            if(window.lucide) lucide.createIcons();
+        };
+
+        window.abrirDetalhesCategoria = (tipo, mesIni, mesFim, ano) => {
+            const filtrados = window.dadosGlobais.filter(ev => {
+                if(ev.status !== 'CONFIRMADO') return false;
+                const d = window.extrairAnoMes(ev.dataStr);
+                if(d.ano !== ano) return false;
+                const mesEv = parseInt(d.mes);
+                if(mesEv < mesIni || mesEv > mesFim) return false;
+                if((ev.tipo || 'OUTROS').toUpperCase() !== tipo) return false;
+                return true;
+            });
+
+            filtrados.sort((a,b) => {
+                const dA = window.extrairAnoMes(a.dataStr);
+                const dB = window.extrairAnoMes(b.dataStr);
+                return (new Date(dA.ano, dA.mes-1, dA.dia)).getTime() - (new Date(dB.ano, dB.mes-1, dB.dia)).getTime();
+            });
+
+            let html = '<div class="space-y-3 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2 mt-4 text-left">';
+            filtrados.forEach(ev => {
+                const dataPt = window.formatarDataExibicao(ev.dataStr);
+                html += `
+                    <div class="bg-[#111318] p-3 rounded-lg border border-[#2a2e39] hover:border-[#d4af37] transition cursor-pointer group" onclick="Swal.close(); setTimeout(()=>window.abrirEdicaoUnificada('${ev.id}'), 300)">
+                        <div class="flex justify-between items-start">
+                            <p class="text-xs font-bold text-white uppercase truncate flex-1">${ev.cliente}</p>
+                            <i data-lucide="edit" class="w-3 h-3 text-gray-600 group-hover:text-[#d4af37] transition ml-2"></i>
+                        </div>
+                        <div class="flex justify-between mt-2">
+                            <span class="text-[10px] text-[#d4af37] font-bold"><i data-lucide="calendar" class="w-3 h-3 inline"></i> ${dataPt}</span>
+                            <span class="text-[10px] text-gray-400"><i data-lucide="map-pin" class="w-3 h-3 inline"></i> ${ev.cidade || 'Não informada'} - ${ev.uf || ''}</span>
+                        </div>
+                        <div class="text-[10px] text-gray-500 mt-1 text-right font-black border-t border-[#2a2e39] pt-2 mt-2">
+                            Valor: <span class="text-[#10b981] ml-1">${window.fmtMoeda(ev.valorNum)}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+
+            const mesesNomes = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"];
+            const txtPeriodo = mesIni === mesFim ? `${mesesNomes[mesIni-1]}/${ano}` : `${mesesNomes[mesIni-1]} a ${mesesNomes[mesFim-1]}/${ano}`;
+
+            Swal.fire({
+                title: `<h3 class="text-sm font-bold text-[#d4af37] uppercase tracking-wider mb-1">${tipo}</h3><p class="text-[10px] text-gray-500 uppercase">${txtPeriodo} • ${filtrados.length} Eventos</p>`,
+                html: html,
+                background: '#1a1d24', color: '#fff',
+                showConfirmButton: false, showCloseButton: true,
+                customClass: { popup: 'border border-[#2a2e39] rounded-xl shadow-2xl' }
+            });
+            setTimeout(() => { if(window.lucide) lucide.createIcons(); }, 100);
+        };
+
+
+        window.carregarFinanceiroGeral = () => {
+            const mes = document.getElementById('filtroMesFin').value;
+            const ano = document.getElementById('filtroAnoFin').value;
+            
+            let r = { faturamento: 0, lucro: 0, despesas: 0, producaoTotal: 0, impostos: 0, van: 0, roadie: 0, gasolina: {total:0}, caches: {l:0, s:0, c:0, v:0} };
+            
+            window.dadosGlobais.forEach(ev => {
+                const d = window.extrairAnoMes(ev.dataStr);
+                if (d.ano !== ano) return;
+                if (mes !== 'todos' && parseInt(d.mes) !== parseInt(mes)) return;
+                if (ev.status !== 'CONFIRMADO') return;
+                
+                let valor = ev.valorNum || 0;
+                let isNf = (ev.temNf === "SIM" || ev.temNf === true || ev.temNf === 'true');
+                let impostos = isNf ? (valor - (valor / 1.12)) : 0; // Calculo reverso simples assumindo que valor é valorTotal
+                let roadie = (ev.roadie === "SIM" || ev.roadie === true || ev.roadie === 'true') ? 100 : 0;
+                let gl = parseFloat(ev.gasL) || 0;
+                let gs = parseFloat(ev.gasS) || 0;
+                let gc = parseFloat(ev.gasC) || 0;
+                let gv = parseFloat(ev.gasLevi) || 0;
+                let van = parseFloat(ev.van) || 0;
+                
+                let gasTotal = gl + gs + gc + gv;
+                let despLogistica = roadie + gasTotal + van;
+                
+                let valBaseReal = isNf ? (valor/1.12) : valor;
+                let impostosReais = isNf ? (valBaseReal * 0.12) : 0;
+                
+                let liquidoDivisivel = valBaseReal - despLogistica;
+                let fundoProducao = liquidoDivisivel / 5;
+                let prodIndiv = fundoProducao / 2;
+                
+                r.faturamento += valor;
+                r.impostos += impostosReais;
+                r.van += van;
+                r.roadie += roadie;
+                r.gasolina.total += gasTotal;
+                r.despesas += (impostosReais + despLogistica);
+                r.lucro += liquidoDivisivel; 
+                r.producaoTotal += fundoProducao;
+                
+                r.caches.l += (fundoProducao + prodIndiv + gl);
+                r.caches.s += (fundoProducao + prodIndiv + gs);
+                r.caches.c += (fundoProducao + roadie + gc);
+                r.caches.v += (fundoProducao + gv);
+            });
+            
+            const html = `
+                <div class="bg-card p-5 mb-4 shadow-xl border border-[#2a2e39] rounded-xl relative overflow-hidden group">
+                    <div class="absolute inset-0 bg-gradient-to-br from-emerald-900/10 to-transparent"></div>
+                    <h4 class="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-4 border-b border-[#2a2e39] pb-2 relative z-10">Resultados do Período</h4>
+                    <div class="grid grid-cols-2 gap-4 text-center relative z-10">
+                        <div class="bg-[#111318] p-3 rounded-lg border border-[#2a2e39] shadow-inner transition hover:border-emerald-900/50">
+                            <span class="text-[9px] text-gray-400 block uppercase font-bold tracking-widest mb-1">Faturamento</span>
+                            <span class="text-lg font-black text-white">${window.fmtMoeda_n(r.faturamento)}</span>
+                        </div>
+                        <div class="bg-[#111318] p-3 rounded-lg border border-emerald-900/30 shadow-[0_0_15px_rgba(16,185,129,0.1)] transition hover:border-emerald-500">
+                            <span class="text-[9px] text-gray-400 block uppercase font-bold tracking-widest mb-1">Lucro Líquido</span>
+                            <span class="text-lg font-black text-emerald-400">${window.fmtMoeda_n(r.lucro)}</span>
+                        </div>
+                        <div class="bg-[#111318] p-3 rounded-lg border border-red-900/30 shadow-[0_0_15px_rgba(239,68,68,0.05)] transition hover:border-red-500">
+                            <span class="text-[9px] text-gray-400 block uppercase font-bold tracking-widest mb-1">Despesas T.</span>
+                            <span class="text-lg font-black text-red-400">${window.fmtMoeda_n(r.despesas)}</span>
+                        </div>
+                        <div class="bg-[#111318] p-3 rounded-lg border border-[#d4af37]/30 shadow-[0_0_15px_rgba(212,175,55,0.1)] transition hover:border-[#d4af37]">
+                            <span class="text-[9px] text-gray-400 block uppercase font-bold tracking-widest mb-1">Caixa (Prod.)</span>
+                            <span class="text-lg font-black text-[#d4af37]">${window.fmtMoeda_n(r.producaoTotal)}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-card p-5 space-y-2 mb-4 shadow-xl border border-[#2a2e39] rounded-xl">
+                    <h3 class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-4 border-b border-[#2a2e39] pb-2">Distribuição Final</h3>
+                    <div class="flex justify-between items-center text-xs text-gray-300 border-b border-[#2a2e39] pb-2 pt-1 hover:bg-[#111318] px-2 rounded transition">
+                        <span class="font-bold uppercase tracking-wider text-[10px]">Luciano</span><span class="font-black text-[#d4af37]">${window.fmtMoeda_n(r.caches.l)}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-gray-300 border-b border-[#2a2e39] pb-2 pt-1 hover:bg-[#111318] px-2 rounded transition">
+                        <span class="font-bold uppercase tracking-wider text-[10px]">Serginho</span><span class="font-black text-[#d4af37]">${window.fmtMoeda_n(r.caches.s)}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-gray-300 border-b border-[#2a2e39] pb-2 pt-1 hover:bg-[#111318] px-2 rounded transition">
+                        <span class="font-bold uppercase tracking-wider text-[10px]">Cesimbra</span><span class="font-black text-white">${window.fmtMoeda_n(r.caches.c)}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-gray-300 pt-1 hover:bg-[#111318] px-2 rounded transition pb-2">
+                        <span class="font-bold uppercase tracking-wider text-[10px]">Levi</span><span class="font-black text-white">${window.fmtMoeda_n(r.caches.v)}</span>
+                    </div>
+                </div>
+            `; 
+            document.getElementById('fin-geral-content').innerHTML = html; 
+        };
+
+        window.abrirRelatorioRecebiveis = () => { 
+            window.alternarView('relatorio-recebiveis'); 
+            const mes = document.getElementById('filtroMesFin').value; 
+            const ano = document.getElementById('filtroAnoFin').value; 
+            
+            let html = '';
+            let totalPrevisto = 0;
+            let totalRecebido = 0;
+
+            const recebiveis = window.dadosGlobais.filter(ev => {
+                if (ev.status !== 'CONFIRMADO') return false;
+                const d = window.extrairAnoMes(ev.dataStr);
+                if (d.ano !== ano) return false;
+                if (mes !== 'todos' && parseInt(d.mes) !== parseInt(mes)) return false;
+                
+                let v = ev.valorNum || 0;
+                let vp = ev.valorPagoNum || 0;
+                return (vp < v); // Só quem ainda não pagou tudo
+            });
+
+            recebiveis.forEach(ev => {
+                let v = ev.valorNum || 0;
+                let vp = ev.valorPagoNum || 0;
+                let falta = v - vp;
+                
+                totalPrevisto += v;
+                totalRecebido += vp;
+
+                let badgeClass = vp > 0 ? 'text-[#f59e0b] border-[#f59e0b] bg-yellow-900/20' : 'text-red-500 border-red-500 bg-red-900/20';
+                let txtSt = vp > 0 ? 'SINAL PAGO' : 'PENDENTE';
+
+                html += `
+                    <div class="bg-[#111318] p-4 border border-[#2a2e39] mb-3 rounded-xl shadow-lg relative overflow-hidden group hover:border-[#d4af37] transition">
+                        <div class="flex justify-between items-start mb-2">
+                            <p class="text-sm font-black text-white truncate w-[65%] uppercase">${ev.cliente}</p>
+                            <span class="text-[8px] font-black ${badgeClass} uppercase border px-1.5 py-0.5 rounded tracking-widest shadow-sm">${txtSt}</span>
+                        </div>
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest font-bold mb-3"><i data-lucide="calendar" class="w-3 h-3 inline"></i> ${window.formatarDataExibicao(ev.dataStr)} | <i data-lucide="map-pin" class="w-3 h-3 inline"></i> ${ev.cidade || 'CIDADE'}</p>
+                        
+                        <div class="flex justify-between items-end border-t border-[#2a2e39] pt-3">
+                            <div>
+                                <span class="block text-[8px] text-gray-500 uppercase font-bold tracking-wider mb-0.5">Total Recebido</span>
+                                <span class="block text-xs font-bold text-gray-400">${window.fmtMoeda_n(vp)}</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="block text-[8px] text-red-500 uppercase font-bold tracking-wider mb-0.5 animate-pulse">Falta Receber</span>
+                                <span class="block text-base font-black text-white">${window.fmtMoeda_n(falta)}</span>
+                            </div>
+                        </div>
+                        <div class="mt-3 flex gap-2 w-full">
+                           <a href="https://wa.me/55${(ev.whatsapp || '').toString().replace(/\D/g, '')}?text=${encodeURIComponent(`Olá ${ev.cliente}, tudo bem? Passo para lembrar da cobrança pendente do nosso evento...`)}" target="_blank" class="w-full bg-green-600/20 text-green-500 hover:bg-green-600/40 py-2 rounded transition flex items-center justify-center gap-1 text-[9px] font-bold uppercase border border-green-900/50"><i data-lucide="message-circle" class="w-3 h-3"></i> Cobrar no WhatsApp</a>
+                        </div>
+                    </div>`;
+            });
+
+            if (recebiveis.length === 0) {
+                html = '<div class="text-center py-10 text-gray-500 text-[10px] font-bold uppercase tracking-widest border border-dashed border-[#2a2e39] rounded-xl bg-[#111318]">Nenhuma cobrança pendente neste período! 🎉</div>';
+            }
+
+            const headerHtml = `
+                <div class="bg-gradient-to-r from-red-900/20 to-transparent p-4 border border-red-900/50 mb-5 rounded-xl shadow-lg">
+                    <div class="grid grid-cols-2 gap-4 text-center relative z-10">
+                        <div>
+                            <span class="text-[9px] text-gray-400 uppercase font-bold tracking-widest block mb-1">Previsto Total</span>
+                            <span class="text-base font-black text-white">${window.fmtMoeda_n(totalPrevisto)}</span>
+                        </div>
+                        <div class="border-l border-red-900/30">
+                            <span class="text-[9px] text-gray-400 uppercase font-bold tracking-widest block mb-1">A Receber</span>
+                            <span class="text-base font-black text-red-500">${window.fmtMoeda_n(totalPrevisto - totalRecebido)}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('lista-recebiveis').innerHTML = headerHtml + html; 
+            if(window.lucide) window.lucide.createIcons();
+        };
+
+        window.gerarComparativo = () => {
+            const ano1 = document.getElementById('compAno1').value;
+            const ano2 = document.getElementById('compAno2').value;
+            
+            const array1 = [0,0,0,0,0,0,0,0,0,0,0,0];
+            const array2 = [0,0,0,0,0,0,0,0,0,0,0,0];
+
+            window.dadosGlobais.forEach(ev => {
+                if (ev.status !== 'CONFIRMADO') return;
+                const d = window.extrairAnoMes(ev.dataStr);
+                if (!d.ano || !d.mes) return;
+                
+                const mesIndex = parseInt(d.mes) - 1;
+                
+                if (d.ano === ano1) array1[mesIndex] += ev.valorNum;
+                if (ano2 !== 'nenhum' && d.ano === ano2) array2[mesIndex] += ev.valorNum;
+            });
+
+            const ctx = document.getElementById('graficoComparativo').getContext('2d');
+            if (window.graficoChart) window.graficoChart.destroy();
+
+            const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+            const datasets = [];
+
+            datasets.push({
+                type: 'bar',
+                label: `Ano ${ano1}`,
+                data: array1,
+                backgroundColor: '#d4af37',
+                borderRadius: 4,
+                barPercentage: 0.6
+            });
+
+            if (ano2 !== 'nenhum' && ano2 !== ano1) {
+                datasets.push({
+                    type: 'line',
+                    label: `Ano ${ano2}`,
+                    data: array2,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 2,
+                    pointBackgroundColor: '#10b981',
+                    pointRadius: 4,
+                    borderDash: [5, 5],
+                    fill: true,
+                    tension: 0.4
+                });
+            }
+
+            window.graficoChart = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: meses, datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    color: '#9ca3af',
+                    plugins: {
+                        legend: { labels: { color: '#e0e0e0', font: { family: 'Montserrat', size: 10, weight: 'bold' } } },
+                        tooltip: {
+                            backgroundColor: '#1a1d24',
+                            titleColor: '#d4af37',
+                            bodyColor: '#fff',
+                            borderColor: '#2a2e39',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    if (context.parsed.y !== null) {
+                                        label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { 
+                            ticks: { color: '#9ca3af', font: {size: 9}, callback: function(value) { return 'R$ ' + (value/1000) + 'k'; } }, 
+                            grid: { color: '#2a2e39' },
+                            beginAtZero: true
+                        },
+                        x: { 
+                            ticks: { color: '#9ca3af', font: {size: 10, weight: 'bold'} }, 
+                            grid: { color: '#2a2e39', display: false } 
+                        }
+                    }
+                }
+            });
         };
 
         // MOTOR DE ARRANQUE ÚNICO E SEGURO NA ÚLTIMA LINHA
