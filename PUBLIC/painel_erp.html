@@ -1199,7 +1199,7 @@
                 }
 
                 // LÓGICA DE SPLIT DA BANDA
-                let imposto = (opNf !== "NÃO") ? (valorOrcamento * 0.12) : 0;
+                let imposto = (opNf !== "NÃO") ? (valorTotal * 0.12) : 0;
                 let roadieCusto = document.getElementById('uni-roadie')?.checked ? 100 : 0;
                 let gasL = parseFloat(document.getElementById('uni-gas-luc')?.value || 0);
                 let gasS = parseFloat(document.getElementById('uni-gas-ser')?.value || 0);
@@ -1208,7 +1208,7 @@
                 let van = parseFloat(document.getElementById('uni-custo-van')?.value || 0);
 
                 let despesasLogistica = roadieCusto + gasL + gasS + gasC + gasLevi + van;
-                let liquidoDivisivel = valorOrcamento - imposto - despesasLogistica;
+                let liquidoDivisivel = valorTotal - imposto - despesasLogistica;
                 
                 let fundoProducao = liquidoDivisivel / 5;
                 let prodIndiv = fundoProducao / 2;
@@ -1668,7 +1668,7 @@
                 let opNf = document.getElementById('uni-temnf')?.value || "NÃO";
                 let valorTotal = (opNf === "SIM") ? (valorOrcamento * 1.12) : valorOrcamento;
 
-                let imposto = (opNf !== "NÃO") ? (valorOrcamento * 0.12) : 0;
+                let imposto = (opNf !== "NÃO") ? (valorTotal * 0.12) : 0;
                 let roadieCusto = document.getElementById('uni-roadie')?.checked ? 100 : 0;
                 let gasL = parseFloat(document.getElementById('uni-gas-luc')?.value || 0);
                 let gasS = parseFloat(document.getElementById('uni-gas-ser')?.value || 0);
@@ -1679,7 +1679,7 @@
                 let totalGasolina = gasL + gasS + gasC + gasLevi;
                 let despesasLogistica = roadieCusto + totalGasolina + van;
                 
-                let liquidoDivisivel = valorOrcamento - imposto - despesasLogistica;
+                let liquidoDivisivel = valorTotal - imposto - despesasLogistica;
                 let fundoProducao = liquidoDivisivel / 5;
                 let prodIndiv = fundoProducao / 2;
 
@@ -2168,9 +2168,11 @@
                 if (mes !== 'todos' && parseInt(d.mes) !== parseInt(mes)) return;
                 if (ev.status !== 'CONFIRMADO') return;
                 
-                let valor = ev.valorNum || 0;
+                let valorTotal = ev.valorNum || 0;
                 let isNf = (ev.temNf === "SIM" || ev.temNf === true || ev.temNf === 'true');
-                let impostos = isNf ? (valor - (valor / 1.12)) : 0; // Calculo reverso simples assumindo que valor é valorTotal
+                
+                let impostosReais = isNf ? (valorTotal * 0.12) : 0;
+                
                 let roadie = (ev.roadie === "SIM" || ev.roadie === true || ev.roadie === 'true') ? 100 : 0;
                 let gl = parseFloat(ev.gasL) || 0;
                 let gs = parseFloat(ev.gasS) || 0;
@@ -2181,14 +2183,11 @@
                 let gasTotal = gl + gs + gc + gv;
                 let despLogistica = roadie + gasTotal + van;
                 
-                let valBaseReal = isNf ? (valor/1.12) : valor;
-                let impostosReais = isNf ? (valBaseReal * 0.12) : 0;
-                
-                let liquidoDivisivel = valBaseReal - despLogistica;
+                let liquidoDivisivel = valorTotal - impostosReais - despLogistica;
                 let fundoProducao = liquidoDivisivel / 5;
                 let prodIndiv = fundoProducao / 2;
                 
-                r.faturamento += valor;
+                r.faturamento += valorTotal;
                 r.impostos += impostosReais;
                 r.van += van;
                 r.roadie += roadie;
