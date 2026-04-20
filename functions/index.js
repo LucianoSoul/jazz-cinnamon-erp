@@ -20,7 +20,7 @@ const CALENDAR_TIME_ZONE = "America/Sao_Paulo";
 const ADMIN_EMAILS = ["luciano.cinnamon@gmail.com"];
 
 const STATUS_AGENDA = {
-  PRE_RESERVA: { sufixo: "PRE-RESERVA", colorId: "9" },
+  PRE_RESERVA: { sufixo: "PRE-RESERVA", colorId: "7" },
   RESERVA: { sufixo: "RESERVA", colorId: "10" },
   CONFIRMADO: { sufixo: "CONFIRMADO", colorId: "3" },
 };

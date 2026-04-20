@@ -27,7 +27,7 @@
         .bg-card { background: #1a1d24; border: 1px solid #2a2e39; border-radius: 12px; }
         
         /* Status Borders */
-        .st-line-PRE_RESERVA { border-left: 4px solid #3b82f6; } 
+        .st-line-PRE_RESERVA { border-left: 4px solid #38bdf8; } 
         .st-line-RESERVA { border-left: 4px solid #10b981; } 
         .st-line-CONFIRMADO { border-left: 4px solid #a855f7; } 
         
@@ -941,13 +941,13 @@
             const sufixo = isAno ? ' (ANO)' : '';
             const cssAnim = isAno ? ' kpi-show' : '';
             const items = [
-                { id: 'PRE_RESERVA', label: 'LEADS' + sufixo, val: s.pre.qtd, icon: 'user', color: 'blue' },
-                { id: 'RESERVA', label: 'RESERVAS' + sufixo, val: window.fmtMoeda(s.reserva.valor), icon: 'briefcase', color: 'green' },
-                { id: 'CONFIRMADO', label: 'CONFIRMADOS' + sufixo, val: window.fmtMoeda(s.conf.valor), icon: 'check-circle', color: 'purple' }
+                { id: 'PRE_RESERVA', label: 'LEADS' + sufixo, val: s.pre.qtd, icon: 'user', activeBorder: 'border-cyan-400', inactiveBorder: 'border-cyan-900/50', iconClass: 'text-cyan-400', shadow: 'shadow-[0_0_15px_rgba(56,189,248,0.32)]' },
+                { id: 'RESERVA', label: 'RESERVAS' + sufixo, val: window.fmtMoeda(s.reserva.valor), icon: 'briefcase', activeBorder: 'border-green-400', inactiveBorder: 'border-green-900/50', iconClass: 'text-green-400', shadow: 'shadow-[0_0_15px_rgba(16,185,129,0.28)]' },
+                { id: 'CONFIRMADO', label: 'CONFIRMADOS' + sufixo, val: window.fmtMoeda(s.conf.valor), icon: 'check-circle', activeBorder: 'border-purple-400', inactiveBorder: 'border-purple-900/50', iconClass: 'text-purple-400', shadow: 'shadow-[0_0_15px_rgba(168,85,247,0.28)]' }
             ];
             document.getElementById('kpi-container').innerHTML = items.map(it => `
-                <div onclick="window.clicarKpi('${it.id}')" class="bg-[#111318] p-3 rounded-2xl border ${window.abaAtual === it.id ? `border-${it.color}-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]` : `border-${it.color}-900/50`} cursor-pointer text-center flex flex-col items-center justify-center transition active:scale-95${cssAnim}">
-                    <i data-lucide="${it.icon}" class="w-3.5 h-3.5 text-${it.color}-400 mb-1.5"></i>
+                <div onclick="window.clicarKpi('${it.id}')" class="bg-[#111318] p-3 rounded-2xl border ${window.abaAtual === it.id ? `${it.activeBorder} ${it.shadow}` : it.inactiveBorder} cursor-pointer text-center flex flex-col items-center justify-center transition active:scale-95${cssAnim}">
+                    <i data-lucide="${it.icon}" class="w-3.5 h-3.5 ${it.iconClass} mb-1.5"></i>
                     <div class="text-[10px] sm:text-xs font-black text-white leading-none">${it.val}</div>
                     <div class="text-[8px] text-gray-500 uppercase font-black mt-1.5 tracking-widest">${it.label}</div>
                 </div>
@@ -1149,8 +1149,8 @@
                 }
                 const linkWhats = `https://wa.me/55${(ev.whatsapp || '').toString().replace(/\D/g, '')}?text=${encodeURIComponent(msgWpp)}`;
                 const estaComProblema = !ev.agendaId;
-                const borderColor = status === 'PRE_RESERVA' ? 'border-blue-500' : (status === 'RESERVA' ? 'border-green-500' : 'border-purple-500');
-                let barColor = 'bg-[#3b82f6]'; let statusTxt = 'PENDENTE'; let colorTxt = 'text-blue-400';
+                const borderColor = status === 'PRE_RESERVA' ? 'border-cyan-400' : (status === 'RESERVA' ? 'border-green-500' : 'border-purple-500');
+                let barColor = 'bg-[#38bdf8]'; let statusTxt = 'PENDENTE'; let colorTxt = 'text-cyan-300';
                 if(percent >= 100) { barColor = 'bg-[#10b981]'; statusTxt = 'QUITADO'; colorTxt = 'text-[#10b981]'; }
                 else if(percent > 0) { barColor = 'bg-orange-500'; statusTxt = 'SINAL PAGO'; colorTxt = 'text-orange-400'; }
 
@@ -1411,7 +1411,7 @@
                 const dataPt = window.formatarDataExibicao(ev.dataStr);
                 if(document.getElementById('uni-info-extra')) document.getElementById('uni-info-extra').innerText = `Data: ${dataPt} | ${ev.cidade || 'CIDADE'} - ${ev.uf || 'UF'}`;
                 
-                let badgeClass = ev.status === 'CONFIRMADO' ? 'text-purple-400 border-purple-500 bg-purple-900/20' : (ev.status === 'RESERVA' ? 'text-green-400 border-green-500 bg-green-900/20' : 'text-blue-400 border-blue-500 bg-blue-900/20');
+                let badgeClass = ev.status === 'CONFIRMADO' ? 'text-purple-400 border-purple-500 bg-purple-900/20' : (ev.status === 'RESERVA' ? 'text-green-400 border-green-500 bg-green-900/20' : 'text-cyan-300 border-cyan-400 bg-cyan-950/30');
                 let estaComProblema = !ev.agendaId;
                 if (estaComProblema) badgeClass = 'text-red-500 border-red-500 bg-red-900/20 animate-pulse';
 
@@ -2389,7 +2389,7 @@
             lista.forEach(c => {
                 let evHtml = "";
                 c.eventos.forEach(ev => {
-                    let color = ev.status === 'CONFIRMADO' ? 'border-[#10b981]' : (ev.status === 'RESERVA' ? 'border-[#f59e0b]' : 'border-[#3b82f6]');
+                    let color = ev.status === 'CONFIRMADO' ? 'border-[#10b981]' : (ev.status === 'RESERVA' ? 'border-[#f59e0b]' : 'border-[#38bdf8]');
                     let lbl = ev.status === 'PRE_RESERVA' ? 'PRÉ-RESERVA' : ev.status;
                     evHtml += `<span class="text-[9px] text-gray-300 bg-[#111318] border-l-2 ${color} px-1.5 py-0.5 rounded mr-1 mb-1 inline-block">${ev.data} <span class="opacity-50 ml-1">• ${lbl}</span></span>`;
                 });
