@@ -1,0 +1,180 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email in ['luciano.cinnamon@gmail.com']
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function isPublicPedidoCreate() {
+      return request.resource.data.keys().hasOnly([
+          'cliente',
+          'documento',
+          'documentoLimpo',
+          'whatsapp',
+          'email',
+          'dataStr',
+          'horaInicio',
+          'duracao',
+          'cidade',
+          'uf',
+          'local',
+          'tipo',
+          'convidados',
+          'status',
+          'statusAgenda',
+          'concorrentes',
+          'valor',
+          'valorPago',
+          'statusPgto',
+          'criadoEm'
+        ])
+        && request.resource.data.keys().hasAll([
+          'cliente',
+          'documentoLimpo',
+          'whatsapp',
+          'email',
+          'dataStr',
+          'horaInicio',
+          'duracao',
+          'cidade',
+          'uf',
+          'local',
+          'tipo',
+          'convidados',
+          'status',
+          'statusAgenda',
+          'valor',
+          'valorPago',
+          'statusPgto',
+          'criadoEm'
+        ])
+        && request.resource.data.cliente is string
+        && request.resource.data.cliente.size() > 1
+        && request.resource.data.cliente.size() <= 160
+        && request.resource.data.documento is string
+        && request.resource.data.documento.size() <= 24
+        && request.resource.data.documentoLimpo is string
+        && (
+          request.resource.data.documentoLimpo.matches('^[0-9]{11}$')
+          || request.resource.data.documentoLimpo.matches('^[0-9]{14}$')
+        )
+        && request.resource.data.whatsapp is string
+        && request.resource.data.whatsapp.size() >= 8
+        && request.resource.data.whatsapp.size() <= 30
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 160
+        && request.resource.data.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+        && request.resource.data.dataStr is string
+        && request.resource.data.dataStr.matches('^[0-9]{2}[-/][0-9]{2}[-/][0-9]{4}$')
+        && request.resource.data.horaInicio is string
+        && request.resource.data.horaInicio.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$')
+        && request.resource.data.duracao is string
+        && request.resource.data.duracao.matches('^[0-9]+:[0-5][0-9]$')
+        && request.resource.data.cidade is string
+        && request.resource.data.cidade.size() > 1
+        && request.resource.data.cidade.size() <= 120
+        && request.resource.data.uf is string
+        && request.resource.data.uf.matches('^[A-Z]{2}$')
+        && request.resource.data.local is string
+        && request.resource.data.local.size() <= 180
+        && request.resource.data.tipo is string
+        && request.resource.data.tipo.size() <= 80
+        && request.resource.data.convidados is string
+        && request.resource.data.convidados.size() <= 6
+        && request.resource.data.status == 'PRE_RESERVA'
+        && request.resource.data.statusAgenda in ['LIVRE', 'OCUPADO', 'PENDENTE']
+        && request.resource.data.concorrentes is list
+        && request.resource.data.concorrentes.size() <= 30
+        && request.resource.data.valor == 0
+        && request.resource.data.valorPago == 0
+        && request.resource.data.statusPgto == 'PENDENTE'
+        && request.resource.data.criadoEm == request.time;
+    }
+
+    function isRecentAgendaIdPatch() {
+      return resource.data.criadoEm is timestamp
+        && request.time < resource.data.criadoEm + duration.value(30, 'm')
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['agendaId'])
+        && request.resource.data.agendaId is string
+        && request.resource.data.agendaId.size() <= 220;
+    }
+
+    function isPublicLinkedPedido() {
+      return !(resource.data.status in ['REPROVADO', 'LIXEIRA']);
+    }
+
+    function isPublicContractPatch() {
+      return isPublicLinkedPedido()
+        && resource.data.status in ['PRE_RESERVA', 'RESERVA']
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'dadosContrato',
+          'valor',
+          'temNf',
+          'status'
+        ])
+        && request.resource.data.dadosContrato is map
+        && request.resource.data.valor is number
+        && request.resource.data.valor >= 0
+        && request.resource.data.valor <= 1000000
+        && request.resource.data.temNf is string
+        && request.resource.data.temNf.size() <= 16
+        && request.resource.data.status in ['PRE_RESERVA', 'RESERVA'];
+    }
+
+    function isPublicNfPatch() {
+      return isPublicLinkedPedido()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'dadosNf',
+          'nfStatus'
+        ])
+        && request.resource.data.dadosNf is map
+        && request.resource.data.nfStatus == 'PENDENTE_CONTADOR';
+    }
+
+    function isPublicContractAttachmentPatch() {
+      return isPublicLinkedPedido()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'anexos',
+          'linkContrato'
+        ])
+        && request.resource.data.anexos is list
+        && request.resource.data.anexos.size() <= 50
+        && request.resource.data.linkContrato is string
+        && request.resource.data.linkContrato.size() <= 500;
+    }
+
+    match /pedidos/{pedidoId} {
+      allow get: if isAdmin()
+        || !exists(/databases/$(database)/documents/pedidos/$(pedidoId))
+        || isPublicLinkedPedido();
+      allow list: if isAdmin();
+      allow create: if isAdmin() || isPublicPedidoCreate();
+      allow update: if isAdmin()
+        || isRecentAgendaIdPatch()
+        || isPublicContractPatch()
+        || isPublicNfPatch()
+        || isPublicContractAttachmentPatch();
+      allow delete: if isAdmin();
+    }
+
+    match /disponibilidade_publica/{pedidoId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /links_publicos/{token} {
+      allow read, write: if isAdmin();
+    }
+
+    match /push_subscriptions/{subscriptionId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

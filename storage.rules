@@ -1,0 +1,18 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isPublicAsset(fileName) {
+      return fileName.matches('^(BOTAO ERP\\.png|OJNDCD-10 \\(1\\)\\.png|logo preto \\(2\\)\\.png|logo branco \\(3\\)\\.png)$');
+    }
+
+    match /{fileName} {
+      allow read: if isPublicAsset(fileName);
+      allow write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

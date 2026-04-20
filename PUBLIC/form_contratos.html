@@ -198,14 +198,43 @@
         // Captura o ID Inteligente da URL
         const urlParams = new URLSearchParams(window.location.search);
         const eventId = urlParams.get('id');
+        const publicToken = urlParams.get('t');
+        const LINK_API = `https://southamerica-east1-${firebaseConfig.projectId}.cloudfunctions.net/linkPublico`;
 
         window.onload = () => { 
             lucide.createIcons(); 
-            if (!eventId) {
+            if (publicToken) {
+                document.getElementById('loading-inicial').classList.remove('hidden');
+                window.carregarDadosDoToken(publicToken);
+            } else if (!eventId) {
                 document.getElementById('erro-url').classList.remove('hidden');
             } else {
                 document.getElementById('loading-inicial').classList.remove('hidden');
                 window.carregarDadosDoLink(eventId);
+            }
+        };
+
+        window.chamarLinkPublico = async (payload) => {
+            const res = await fetch(LINK_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if(!data.success) throw new Error(data.error || 'Link invalido.');
+            return data;
+        };
+
+        window.carregarDadosDoToken = async (token) => {
+            try {
+                const data = await window.chamarLinkPublico({ acao: 'CARREGAR_CONTRATO', token });
+                window.tokenPublicoContrato = token;
+                window.usandoTokenPublico = true;
+                await window.carregarDadosDoLink(data.pedidoId);
+            } catch(e) {
+                console.error(e);
+                document.getElementById('loading-inicial').classList.add('hidden');
+                document.getElementById('erro-url').classList.remove('hidden');
             }
         };
 
@@ -402,6 +431,21 @@
             };
 
             try {
+                if (window.usandoTokenPublico && window.tokenPublicoContrato) {
+                    await window.chamarLinkPublico({
+                        acao: 'SALVAR_CONTRATO',
+                        token: window.tokenPublicoContrato,
+                        dadosContrato: dadosContrato,
+                        valor: finalValue,
+                        temNf: isNf ? "SIM" : "NAO"
+                    });
+
+                    document.getElementById('formContrato').classList.add('hidden');
+                    document.getElementById('erro-url').classList.add('hidden');
+                    document.getElementById('sucesso-cliente').classList.remove('hidden');
+                    return;
+                }
+
                 // ATUALIZA O FIREBASE COM A NOVA ESCOLHA DE NF E O NOVO VALOR GLOBAL
                 await updateDoc(doc(db, "pedidos", window.pedidoAtualId), {
                     dadosContrato: dadosContrato,

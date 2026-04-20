@@ -8,6 +8,8 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Jazz ERP">
+    <meta name="theme-color" content="#1a1d24">
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/BOTAO%20ERP.png?alt=media">
     <link rel="icon" type="image/png" href="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/BOTAO%20ERP.png?alt=media">
 
@@ -105,6 +107,9 @@
             <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300 flex items-center gap-2"><i data-lucide="bell" class="w-4 h-4 text-[#d4af37]"></i> Notificações</h2>
             <button onclick="window.fecharPaineis()" class="text-gray-500 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
         </div>
+        <button id="btn-ativar-push" onclick="window.ativarNotificacoesPush()" class="hidden w-full mb-4 bg-[#d4af37] text-black hover:bg-[#b5952f] transition rounded-lg py-2.5 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
+            <i data-lucide="bell-ring" class="w-4 h-4"></i> Ativar alertas no iPhone
+        </button>
         <div id="lista-notificacoes" class="space-y-3 overflow-x-hidden pb-20"></div>
     </div>
 
@@ -410,14 +415,16 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc, addDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const URL_BACKEND = "https://script.google.com/macros/s/AKfycbx9NsoG0R-NNtbECB-Qw96YDcZaexKDmbfH90vIiXzwElYALIJBO5NdUC9tCuO4AXUh/exec";
         const firebaseConfig = { apiKey: "AIzaSyBoQvjJ_j_OO6uNbW0ar-rzRiiMR2Xe8m4", authDomain: "jazz-cinnamon-erp.firebaseapp.com", projectId: "jazz-cinnamon-erp", storageBucket: "jazz-cinnamon-erp.firebasestorage.app", messagingSenderId: "359043770756", appId: "1:359043770756:web:a5a4eec50e6e40f0ebd5d1" };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const ADMIN_EMAILS = ["luciano.cinnamon@gmail.com"];
+        const VAPID_PUBLIC_KEY = "BFrhKIqmrEzOqSAncFj9M6fI8j1IZmqgnoUJVI-Xi47rQZVoV1qyyeC_BzaVsAClUsU53lqzncTeVpXxWUGUSXI";
 
         window.dadosGlobais = [];
         window.notificacoesGlobais = [];
@@ -426,6 +433,15 @@
         window.dadosJaCarregados = false;
         window.timeoutKpiAno = null;
         window.mostrarApenasExpirados = false;
+        window.unsubscribePedidos = null;
+        window.espelhoPublicoSincronizado = false;
+        window.pedidoParaAbrirId = new URLSearchParams(window.location.search).get('pedido') || "";
+        window.pushRegistroEmAndamento = false;
+
+        const isAdminUser = (user) => {
+            const emailUsuario = (user?.email || "").toLowerCase();
+            return !!user && !user.isAnonymous && ADMIN_EMAILS.includes(emailUsuario);
+        };
 
         // UTILITÁRIOS
         window.safeNum = (val) => val ? (typeof val === 'number' ? val : parseFloat(String(val).replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]+/g, "")) || 0) : 0;
@@ -449,6 +465,231 @@
         window.formatarCpfCnpj = (i) => { let v = i.value.replace(/\D/g, ""); if (v.length <= 11) { v = v.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2"); } else { v = v.substring(0, 14).replace(/^(\d{2})(\d)/, "$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d)/, "$1-$2"); } i.value = v; };
         window.compilarAnexos = (ev) => { if(!ev) return []; let raw = []; if(ev.anexos) { if(Array.isArray(ev.anexos)) raw = [...ev.anexos]; else Object.values(ev.anexos).forEach(a => raw.push(a)); } return raw; };
 
+        window.payloadDisponibilidadePublica = (ev) => ({
+            dataStr: ev.dataStr || ev.data || "",
+            horaInicio: ev.horaInicio || "",
+            horaTermino: ev.horaTermino || window.horaTerminoCalculado(ev.horaInicio, ev.duracao),
+            duracao: ev.duracao || "",
+            cidade: ev.cidade || "",
+            uf: ev.uf || "",
+            status: ev.status || "",
+            statusAgenda: ev.statusAgenda || "",
+            tipo: ev.tipo || "",
+            atualizadoEm: new Date()
+        });
+
+        window.sincronizarDisponibilidadePublica = async () => {
+            try {
+                const ativos = window.dadosGlobais.filter(ev => ev.id && ev.status !== 'REPROVADO' && ev.status !== 'LIXEIRA');
+                await Promise.all(ativos.map(ev => setDoc(doc(db, "disponibilidade_publica", ev.id), window.payloadDisponibilidadePublica(ev))));
+            } catch(e) {
+                console.warn("Nao foi possivel sincronizar disponibilidade publica:", e);
+            }
+        };
+
+        window.gerarTokenPublico = () => {
+            const bytes = new Uint8Array(32);
+            crypto.getRandomValues(bytes);
+            return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        };
+
+        window.criarLinkPublico = async (tipo, pedidoId) => {
+            const token = window.gerarTokenPublico();
+            const diasValidade = 30;
+            await setDoc(doc(db, "links_publicos", token), {
+                pedidoId,
+                tipo,
+                ativo: true,
+                criadoEm: new Date(),
+                expiraEm: new Date(Date.now() + diasValidade * 24 * 60 * 60 * 1000)
+            });
+            const pagina = tipo === 'CONTRATO' ? 'form_contratos' : 'form_nf';
+            return `https://jazz-cinnamon-erp.web.app/${pagina}?t=${token}`;
+        };
+
+        window.temContratoGerado = (ev) => {
+            const anexos = window.compilarAnexos(ev);
+            return Boolean(ev.linkContrato && String(ev.linkContrato).trim()) || anexos.some(a => String(a.nome || '').toUpperCase().includes('CONTRATO'));
+        };
+
+        window.precisaLinkContrato = (ev) => {
+            return ev && ['RESERVA', 'CONFIRMADO'].includes(ev.status) && !window.temContratoGerado(ev);
+        };
+
+        window.urlBase64ToUint8Array = (base64String) => {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const rawData = atob(base64);
+            return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+        };
+
+        window.hashTexto = async (texto) => {
+            const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto));
+            return Array.from(new Uint8Array(buffer), b => b.toString(16).padStart(2, '0')).join('');
+        };
+
+        window.suportaPush = () => {
+            return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+        };
+
+        window.atualizarBotaoPush = () => {
+            const btn = document.getElementById('btn-ativar-push');
+            if(!btn) return;
+
+            const mostrar = window.suportaPush() && Notification.permission !== 'granted';
+            btn.classList.toggle('hidden', !mostrar);
+            if(window.lucide) window.lucide.createIcons();
+        };
+
+        window.registrarServiceWorkerPush = async () => {
+            if(!('serviceWorker' in navigator)) return null;
+            return navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        };
+
+        window.salvarInscricaoPush = async (subscription) => {
+            const user = auth.currentUser;
+            if(!isAdminUser(user)) return;
+
+            const subscriptionData = subscription.toJSON();
+            const subscriptionId = await window.hashTexto(subscriptionData.endpoint);
+            await setDoc(doc(db, 'push_subscriptions', subscriptionId), {
+                ativo: true,
+                uid: user.uid,
+                email: user.email || '',
+                subscription: subscriptionData,
+                userAgent: navigator.userAgent,
+                atualizadoEm: serverTimestamp(),
+                criadoEm: serverTimestamp()
+            }, { merge: true });
+        };
+
+        window.garantirInscricaoPush = async () => {
+            if(window.pushRegistroEmAndamento || !window.suportaPush()) return false;
+            window.pushRegistroEmAndamento = true;
+
+            try {
+                const registration = await window.registrarServiceWorkerPush();
+                if(!registration || Notification.permission !== 'granted') return false;
+
+                let subscription = await registration.pushManager.getSubscription();
+                if(!subscription) {
+                    subscription = await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: window.urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                    });
+                }
+
+                await window.salvarInscricaoPush(subscription);
+                window.atualizarBotaoPush();
+                return true;
+            } catch(e) {
+                console.warn('Nao foi possivel registrar Web Push:', e);
+                return false;
+            } finally {
+                window.pushRegistroEmAndamento = false;
+            }
+        };
+
+        window.ativarNotificacoesPush = async (mostrarFeedback = true) => {
+            if(!window.suportaPush()) {
+                if(mostrarFeedback) Swal.fire({icon: 'info', title: 'Indisponivel', text: 'No iPhone, abra pelo icone instalado na Tela de Inicio.', background: '#1a1d24', color: '#fff'});
+                return false;
+            }
+
+            try {
+                const permission = Notification.permission === 'granted'
+                    ? 'granted'
+                    : await Notification.requestPermission();
+
+                if(permission !== 'granted') {
+                    window.atualizarBotaoPush();
+                    if(mostrarFeedback) Swal.fire({icon: 'info', title: 'Permissao nao ativada', text: 'As notificacoes ficaram desativadas neste dispositivo.', background: '#1a1d24', color: '#fff'});
+                    return false;
+                }
+
+                const ok = await window.garantirInscricaoPush();
+                if(mostrarFeedback) {
+                    Swal.fire({
+                        icon: ok ? 'success' : 'warning',
+                        title: ok ? 'Alertas ativados' : 'Nao foi possivel ativar',
+                        text: ok ? 'Pedidos, contratos e dados de NF vao aparecer como notificacao do ERP.' : 'Tente abrir o ERP pelo icone da Tela de Inicio e ativar novamente.',
+                        background: '#1a1d24',
+                        color: '#fff',
+                        timer: ok ? 1800 : undefined,
+                        showConfirmButton: !ok
+                    });
+                }
+                return ok;
+            } catch(e) {
+                console.error(e);
+                if(mostrarFeedback) Swal.fire({icon: 'error', title: 'Erro', text: 'Falha ao ativar as notificacoes.', background: '#1a1d24', color: '#fff'});
+                return false;
+            }
+        };
+
+        window.oferecerAtivacaoPush = () => {
+            if(!window.suportaPush() || Notification.permission !== 'default') return;
+            if(localStorage.getItem('jazz_push_prompt_seen') === '1') return;
+
+            localStorage.setItem('jazz_push_prompt_seen', '1');
+            setTimeout(() => {
+                Swal.fire({
+                    icon: 'question',
+                    title: 'Receber notificacoes?',
+                    text: 'Deseja receber alertas de pedidos, contratos e dados de NF na tela do celular?',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sim, ativar',
+                    cancelButtonText: 'Agora nao',
+                    confirmButtonColor: '#d4af37',
+                    cancelButtonColor: '#3f3f46',
+                    background: '#1a1d24',
+                    color: '#fff',
+                    preConfirm: () => window.ativarNotificacoesPush(false)
+                }).then((result) => {
+                    if(!result.isConfirmed) return;
+                    Swal.fire({
+                        icon: result.value ? 'success' : 'warning',
+                        title: result.value ? 'Alertas ativados' : 'Nao foi possivel ativar',
+                        text: result.value ? 'Este aparelho ja pode receber alertas do ERP.' : 'Se o iPhone nao abriu a permissao, tente pelo botao Ativar alertas.',
+                        background: '#1a1d24',
+                        color: '#fff',
+                        timer: result.value ? 1800 : undefined,
+                        showConfirmButton: !result.value
+                    });
+                });
+            }, 900);
+        };
+
+        window.abrirPedidoPorId = (id) => {
+            if(!id) return false;
+            const ev = window.dadosGlobais.find(e => e.id === id);
+            if(!ev) {
+                window.pedidoParaAbrirId = id;
+                return false;
+            }
+
+            window.pedidoParaAbrirId = "";
+            window.fecharPaineis();
+            window.alternarView('dashboard');
+            setTimeout(() => window.abrirEdicaoUnificada(id), 80);
+            if(window.history && window.location.search.includes('pedido=')) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+            return true;
+        };
+
+        window.tentarAbrirPedidoPendente = () => {
+            if(window.pedidoParaAbrirId) window.abrirPedidoPorId(window.pedidoParaAbrirId);
+        };
+
+        if('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                if(event.data?.type === 'OPEN_PEDIDO') {
+                    window.abrirPedidoPorId(event.data.pedidoId);
+                }
+            });
+        }
+
         // === SWIPE LOGIC ===
         window.cardTouchStartX = 0; window.cardTouchStartY = 0;
         window.cardTouchStart = (e, el) => { if(e.touches && e.touches.length > 1) return; window.cardTouchStartX = e.touches ? e.touches[0].clientX : e.clientX; window.cardTouchStartY = e.touches ? e.touches[0].clientY : e.clientY; el.style.transition = 'none'; el.dataset.swiping = 'true'; };
@@ -466,7 +707,7 @@
 
         window.enviarDadosContador = (id) => { const ev = window.dadosGlobais.find(e => e.id === id); if(!ev || !ev.dadosNf) return; const nf = ev.dadosNf; const endereco = `${nf.endereco || ''}, ${nf.numero || ''}${nf.complemento ? ' - ' + nf.complemento : ''}, ${nf.bairro || ''}`; const textoWpp = `Oi Ketelin,\n\nVou precisar de mais uma nota fiscal. Seguem os dados:\n\n*Dados do Cliente*\nCNPJ ou CPF: ${nf.doc || ''}\nRazão Social ou Nome Completo: ${nf.nome || ''}\nEndereço Completo: ${endereco}\nCidade - Estado: ${nf.cidade || ''} - ${nf.uf || ''}\nCEP: ${nf.cep || ''}\nInscrição Estadual (IE): ${nf.ie || 'Isento'}\nInscrição Municipal (IM): ${nf.im || 'Isento'}\nE-mail: ${nf.email || ''}\n\n*Dados da Transação*\nDescrição do Serviço: ${nf.descricao || 'Prestação de Serviços Musicais'}\nValor Total: ${window.fmtMoeda(ev.valorNum)}\nLocal da Prestação: ${ev.cidade || ''} - ${ev.uf || ''}`; const urlWpp = `https://api.whatsapp.com/send?phone=555484188715&text=${encodeURIComponent(textoWpp)}`; window.open(urlWpp, '_blank'); };
 
-        window.enviarLinkNf = () => {
+        window.enviarLinkNf = async () => {
             const id = document.getElementById('uni-id').value;
             const ev = window.dadosGlobais.find(e => e.id === id);
             if(!ev) return;
@@ -477,10 +718,68 @@
             }
             const msg = `Olá ${ev.cliente}, tudo bem?\n\nPara darmos andamento na emissão da sua nota fiscal, por favor, preencha os dados no link seguro abaixo:\n\nhttps://jazz-cinnamon-erp.web.app/form_nf?id=${String(ev.id).trim()}`;
             const linkWpp = `https://wa.me/55${wppNum}?text=${encodeURIComponent(msg)}`;
-            window.open(linkWpp, '_blank');
+            const janela = window.open('', '_blank');
+            try {
+                const linkNf = await window.criarLinkPublico('NF', ev.id);
+                const msgSeguro = `Ola ${ev.cliente}, tudo bem?\n\nPara darmos andamento na emissao da sua nota fiscal, por favor, preencha os dados no link seguro abaixo:\n\n${linkNf}`;
+                const linkSeguro = `https://wa.me/55${wppNum}?text=${encodeURIComponent(msgSeguro)}`;
+                if(janela) janela.location.href = linkSeguro;
+                else window.open(linkSeguro, '_blank');
+            } catch(e) {
+                if(janela) janela.close();
+                console.error(e);
+                Swal.fire({icon: 'error', title: 'Erro', text: 'Nao foi possivel gerar o link seguro da NF.', background: '#1a1d24', color: '#fff'});
+            }
         };
 
         // === MOTOR DE CONEXÃO ===
+        window.enviarLinkContrato = async (id) => {
+            const ev = window.dadosGlobais.find(e => e.id === id);
+            if(!ev) return;
+            const wppNum = (ev.whatsapp || '').toString().replace(/\D/g, '');
+            if(!wppNum) {
+                Swal.fire({icon: 'info', title: 'Aviso', text: 'Cliente nao possui WhatsApp cadastrado.', background: '#1a1d24', color: '#fff'});
+                return;
+            }
+
+            const janela = window.open('', '_blank');
+            try {
+                const linkContrato = await window.criarLinkPublico('CONTRATO', ev.id);
+                const emailCliente = ev.email || 'seu e-mail';
+                const msg = `Ol\u00e1 ${ev.cliente}. Seu or\u00e7amento foi aprovado e nossa data est\u00e1 confirmada.\n\nA pr\u00f3xima etapa \u00e9 assinarmos o contrato para formalizarmos o servi\u00e7o.\n\nPreencha os dados no link abaixo. Em seguida voc\u00ea receber\u00e1 o contrato no seu e-mail ${emailCliente}, leia com aten\u00e7\u00e3o e assine.\n\n${linkContrato}`;
+                const linkWpp = `https://wa.me/55${wppNum}?text=${encodeURIComponent(msg)}`;
+                if(janela) janela.location.href = linkWpp;
+                else window.open(linkWpp, '_blank');
+            } catch(e) {
+                if(janela) janela.close();
+                console.error(e);
+                Swal.fire({icon: 'error', title: 'Erro', text: 'Nao foi possivel gerar o link seguro do contrato.', background: '#1a1d24', color: '#fff'});
+            }
+        };
+
+        window.abrirWhatsappEvento = async (id) => {
+            const ev = window.dadosGlobais.find(e => e.id === id);
+            if(!ev) return;
+
+            if(window.precisaLinkContrato(ev)) {
+                await window.enviarLinkContrato(id);
+                return;
+            }
+
+            const wppNum = (ev.whatsapp || '').toString().replace(/\D/g, '');
+            if(!wppNum) return;
+
+            const dataPt = window.formatarDataExibicao(ev.dataStr);
+            const diaSem = window.getDiaSemana(ev.dataStr).toUpperCase();
+            let msgWpp = '';
+            if (ev.status === 'PRE_RESERVA') {
+                msgWpp = `Ola ${ev.cliente}! Eu sou o Luciano da Jazz Cinnamon.\n\nAcabei de receber em nosso sistema sua solicitacao de orcamento para o dia *${dataPt}* em *${ev.cidade || 'LOCAL'} - ${ev.uf || 'UF'}*.\n\nVai chegar direto no seu e-mail. Quer receber por aqui tambem e continuamos conversando?`;
+            } else {
+                msgWpp = `Oi ${ev.cliente}, tudo bem?\n\nPodemos ajustar os detalhes do seu evento do dia ${dataPt} (${diaSem})?`;
+            }
+            window.open(`https://wa.me/55${wppNum}?text=${encodeURIComponent(msgWpp)}`, '_blank');
+        };
+
         window.iniciarConexao = async () => {
             if(window.lucide) window.lucide.createIcons();
             const hoje = new Date();
@@ -509,19 +808,42 @@
                     }
                 }
             });
-            try { await signInAnonymously(auth); } catch(e) { console.warn("Erro Auth:", e); }
-            onSnapshot(collection(db, "pedidos"), (snapshot) => {
-                window.dadosGlobais = [];
-                snapshot.forEach(d => {
-                    const dt = d.data();
-                    if(dt.status !== 'REPROVADO' && dt.status !== 'LIXEIRA') {
-                        dt.valorNum = window.parseMoeda(dt.valor);
-                        dt.valorPagoNum = window.parseMoeda(dt.valorPago);
-                        dt.dataStr = dt.dataStr || dt.data || "";
-                        window.dadosGlobais.push({ id: d.id, ...dt });
+            onAuthStateChanged(auth, (user) => {
+                if (!isAdminUser(user)) {
+                    window.location.replace('index.html');
+                    return;
+                }
+
+                if (window.unsubscribePedidos) return;
+
+                window.registrarServiceWorkerPush();
+                window.atualizarBotaoPush();
+                if (window.suportaPush() && Notification.permission === 'granted') {
+                    window.garantirInscricaoPush();
+                }
+                window.oferecerAtivacaoPush();
+
+                window.unsubscribePedidos = onSnapshot(collection(db, "pedidos"), (snapshot) => {
+                    window.dadosGlobais = [];
+                    snapshot.forEach(d => {
+                        const dt = d.data();
+                        if(dt.status !== 'REPROVADO' && dt.status !== 'LIXEIRA') {
+                            dt.valorNum = window.parseMoeda(dt.valor);
+                            dt.valorPagoNum = window.parseMoeda(dt.valorPago);
+                            dt.dataStr = dt.dataStr || dt.data || "";
+                            window.dadosGlobais.push({ id: d.id, ...dt });
+                        }
+                    });
+                    window.processarFiltrosDashboard();
+                    window.tentarAbrirPedidoPendente();
+                    if (!window.espelhoPublicoSincronizado) {
+                        window.espelhoPublicoSincronizado = true;
+                        window.sincronizarDisponibilidadePublica();
                     }
+                }, (error) => {
+                    console.error("Erro ao carregar pedidos:", error);
+                    Swal.fire({ icon: 'error', title: 'Acesso ao banco negado', text: 'Confirme se este e-mail está liberado nas regras do Firestore.', background: '#1a1d24', color: '#fff' });
                 });
-                window.processarFiltrosDashboard();
             });
         };
 
@@ -810,6 +1132,7 @@
                         ${temAnexo ? `<span class="absolute -top-1.5 -right-1.5 bg-[#d4af37] text-black text-[9px] font-black w-4 h-4 flex items-center justify-center rounded-full shadow-md">${anexos.length}</span>` : ''}
                     </button>
                 `;
+                const btnContratoNomeHTML = window.precisaLinkContrato(ev) ? `<button onclick="event.stopPropagation(); window.enviarLinkContrato('${ev.id}')" class="ml-2 shrink-0 text-green-500 hover:text-green-400 transition" title="Enviar link seguro do contrato"><i data-lucide="message-circle" class="w-4 h-4"></i></button>` : '';
 
                 html += `
                 <div class="relative overflow-hidden mb-5 rounded-2xl shadow-2xl card-animado">
@@ -819,7 +1142,7 @@
                     </div>
                     <div class="bg-[#1a1d24] p-5 rounded-2xl border-l-[3.5px] ${borderColor} relative z-10 transition-transform duration-300 w-full h-full"
                          ontouchstart="window.cardTouchStart(event, this)" ontouchmove="window.cardTouchMove(event, this)" ontouchend="window.cardTouchEnd(event, this, '${ev.id}')">
-                        <h2 class="text-sm font-black text-white uppercase truncate mb-1">${ev.cliente}</h2>
+                        <div class="flex items-center mb-1 min-w-0"><h2 class="text-sm font-black text-white uppercase truncate">${ev.cliente}</h2>${btnContratoNomeHTML}</div>
                         <div class="text-[8px] text-gray-500 font-bold uppercase flex items-center gap-1 tracking-widest mb-4"><i data-lucide="map-pin" class="w-2.5 h-2.5"></i> ${ev.tipo || 'OUTROS'} • ${ev.cidade || 'CIDADE'} - ${ev.uf || 'UF'}</div>
                         <div class="flex justify-between items-center mb-4">
                             <div class="text-2xl font-black text-[#d4af37] tracking-tight">${dataPt}</div>
@@ -842,7 +1165,7 @@
                                 </select>
                             </div>
                             ${btnPastinhaHTML}
-                            <a href="${linkWhats}" target="_blank" class="w-9 h-9 rounded-lg border border-[#2a2e39] flex items-center justify-center text-green-500 hover:bg-green-900/20 transition"><i data-lucide="message-circle" class="w-4 h-4"></i></a>
+                            <a href="${linkWhats}" target="_blank" onclick="event.preventDefault(); window.abrirWhatsappEvento('${ev.id}')" class="w-9 h-9 rounded-lg border border-[#2a2e39] flex items-center justify-center text-green-500 hover:bg-green-900/20 transition"><i data-lucide="message-circle" class="w-4 h-4"></i></a>
                             <button onclick="window.abrirEdicaoUnificada('${ev.id}')" class="w-9 h-9 rounded bg-[#d4af37] text-black flex items-center justify-center shadow-lg hover:bg-[#b5952f] transition"><i data-lucide="edit" class="w-4 h-4"></i></button>
                             <button onclick="window.reprovarEvento('${ev.id}')" class="w-9 h-9 rounded border border-[#2a2e39] flex items-center justify-center text-red-400 hover:border-red-900 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         </div>
@@ -1038,8 +1361,8 @@
         };
         window.fecharPaineis = () => { document.getElementById('side-menu').classList.remove('open'); document.getElementById('menu-overlay').classList.remove('open'); document.getElementById('side-notificacoes').classList.remove('open'); };
         window.abrirMenu = () => { document.getElementById('side-menu').classList.add('open'); document.getElementById('menu-overlay').classList.add('open'); };
-        window.abrirNotificacoes = () => { document.getElementById('side-notificacoes').classList.add('open'); document.getElementById('menu-overlay').classList.add('open'); };
-        window.fazerLogout = async () => { await signOut(auth); window.location.reload(); };
+        window.abrirNotificacoes = () => { window.atualizarBotaoPush(); document.getElementById('side-notificacoes').classList.add('open'); document.getElementById('menu-overlay').classList.add('open'); };
+        window.fazerLogout = async () => { await signOut(auth); window.location.replace('index.html'); };
 
         window.carimbarEvento = () => {
             // Futura implementação se necessário

@@ -10,6 +10,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Jazz ERP">
+    <meta name="theme-color" content="#1a1d24">
+    <link rel="manifest" href="/manifest.webmanifest">
 
     <link rel="apple-touch-icon" href="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/OJNDCD-10%20(1).png?alt=media">
     <link rel="icon" type="image/png" href="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/OJNDCD-10%20(1).png?alt=media">
@@ -86,7 +88,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         const firebaseConfig = { 
             apiKey: "AIzaSyBoQvjJ_j_OO6uNbW0ar-rzRiiMR2Xe8m4", 
@@ -100,14 +102,27 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const provider = new GoogleAuthProvider();
+        const ADMIN_EMAILS = ["luciano.cinnamon@gmail.com"];
+
+        const isAdminUser = (user) => {
+            const emailUsuario = (user?.email || "").toLowerCase();
+            return !!user && !user.isAnonymous && ADMIN_EMAILS.includes(emailUsuario);
+        };
 
         lucide.createIcons();
 
         // Redireciona imediatamente se já estiver logado
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
+        onAuthStateChanged(auth, async (user) => {
+            if (user?.isAnonymous) {
+                await signOut(auth);
+                return;
+            }
+
+            if (isAdminUser(user)) {
                 document.body.innerHTML = '<div class="min-h-screen flex flex-col items-center justify-center bg-[#0f1115]"><div class="w-10 h-10 border-4 border-[#2a2e39] border-t-[#d4af37] rounded-full animate-spin"></div><p class="mt-4 text-[#d4af37] font-bold uppercase tracking-widest text-xs">A Redirecionar...</p></div>';
                 window.location.replace('painel_erp.html');
+            } else if (user) {
+                await signOut(auth);
             }
         });
 
@@ -140,13 +155,18 @@
             try {
                 // Removida a configuração forçada de persistência para evitar bloqueios em browsers mobile
                 const userCredential = await signInWithEmailAndPassword(auth, email.value.trim(), password.value.trim());
-                if (userCredential.user) {
+                if (isAdminUser(userCredential.user)) {
                     window.location.replace("painel_erp.html");
+                } else {
+                    await signOut(auth);
+                    throw { code: "auth/not-admin" };
                 }
             } catch (error) {
                 console.error(error);
                 let msg = "Ocorreu um erro ao entrar.";
-                if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                if (error.code === 'auth/not-admin') {
+                    msg = "Este e-mail não está autorizado para acessar o ERP.";
+                } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
                     msg = "E-mail ou palavra-passe incorretos.";
                 } else if (error.code === 'auth/invalid-email') {
                     msg = "Formato de e-mail inválido.";
@@ -168,8 +188,12 @@
             btnGoogle.disabled = true;
             try {
                 const result = await signInWithPopup(auth, provider);
-                if (result.user) {
+                if (isAdminUser(result.user)) {
                     window.location.replace("painel_erp.html");
+                } else {
+                    await signOut(auth);
+                    Swal.fire({ icon: "error", title: "Acesso Negado", text: "Este Google não está autorizado para acessar o ERP.", background: "#1a1d24", color: "#fff", confirmButtonColor: "#d4af37" });
+                    btnGoogle.disabled = false;
                 }
             } catch (error) {
                 console.error(error);

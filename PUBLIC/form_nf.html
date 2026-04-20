@@ -190,14 +190,43 @@
         // Captura o ID Inteligente da URL
         const urlParams = new URLSearchParams(window.location.search);
         const eventId = urlParams.get('id');
+        const publicToken = urlParams.get('t');
+        const LINK_API = `https://southamerica-east1-${firebaseConfig.projectId}.cloudfunctions.net/linkPublico`;
 
         window.onload = () => { 
             lucide.createIcons(); 
-            if (!eventId) {
+            if (publicToken) {
+                document.getElementById('loading-inicial').classList.remove('hidden');
+                window.carregarDadosDoToken(publicToken);
+            } else if (!eventId) {
                 document.getElementById('erro-url').classList.remove('hidden');
             } else {
                 document.getElementById('loading-inicial').classList.remove('hidden');
                 window.carregarDadosDoLink(eventId);
+            }
+        };
+
+        window.chamarLinkPublico = async (payload) => {
+            const res = await fetch(LINK_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if(!data.success) throw new Error(data.error || 'Link invalido.');
+            return data;
+        };
+
+        window.carregarDadosDoToken = async (token) => {
+            try {
+                const data = await window.chamarLinkPublico({ acao: 'CARREGAR_NF', token });
+                window.tokenPublicoNf = token;
+                window.usandoTokenPublico = true;
+                await window.carregarDadosDoLink(data.pedidoId);
+            } catch(e) {
+                console.error(e);
+                document.getElementById('loading-inicial').classList.add('hidden');
+                document.getElementById('erro-url').classList.remove('hidden');
             }
         };
 
@@ -323,6 +352,18 @@
 
             try {
                 // Atualiza o Firebase para disparar a notificação no ERP
+                if (window.usandoTokenPublico && window.tokenPublicoNf) {
+                    await window.chamarLinkPublico({
+                        acao: 'SALVAR_NF',
+                        token: window.tokenPublicoNf,
+                        dadosNf: dadosNf
+                    });
+
+                    document.getElementById('formNf').classList.add('hidden');
+                    document.getElementById('sucesso-cliente').classList.remove('hidden');
+                    return;
+                }
+
                 await updateDoc(doc(db, "pedidos", window.pedidoAtualId), {
                     dadosNf: dadosNf,
                     nfStatus: 'PENDENTE_CONTADOR'

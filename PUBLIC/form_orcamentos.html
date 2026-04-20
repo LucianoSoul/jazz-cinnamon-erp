@@ -131,6 +131,7 @@
         const firebaseConfig = { apiKey: "AIzaSyBoQvjJ_j_OO6uNbW0ar-rzRiiMR2Xe8m4", authDomain: "jazz-cinnamon-erp.firebaseapp.com", projectId: "jazz-cinnamon-erp", storageBucket: "jazz-cinnamon-erp.firebasestorage.app", messagingSenderId: "359043770756", appId: "1:359043770756:web:a5a4eec50e6e40f0ebd5d1" };
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        const LINK_API = `https://southamerica-east1-${firebaseConfig.projectId}.cloudfunctions.net/linkPublico`;
 
         window.estadoAgenda = "LIVRE";
         window.concorrentesEncontrados = [];
@@ -191,25 +192,31 @@
         window.triggerBusca = async (docVal) => {
             const docLimpo = docVal.replace(/\D/g, "");
             const tipo = document.querySelector('input[name="tipo_doc"]:checked').value;
+            const buscando = document.getElementById('txt-buscando');
             
             // Só dispara a busca se tiver o tamanho exato, economizando requisições
             if (tipo === 'CPF' && docLimpo.length !== 11) return;
             if (tipo === 'CNPJ' && docLimpo.length !== 14) return;
 
-            document.getElementById('txt-buscando').classList.remove('hidden');
+            buscando.classList.remove('hidden');
             try {
-                // Delay artificial de 1.3 segundos para melhorar a experiência do usuário (UX)
-                await new Promise(resolve => setTimeout(resolve, 1300));
-                
-                const q = query(collection(db, "pedidos"), where("documentoLimpo", "==", docLimpo));
-                const snap = await getDocs(q);
-                if (!snap.empty) {
-                    const d = snap.docs[0].data();
+                const resposta = await fetch(LINK_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ acao: 'BUSCAR_CLIENTE', documentoLimpo: docLimpo })
+                }).then(r => r.json());
+
+                if (resposta.success && resposta.encontrado && resposta.cliente) {
+                    const d = resposta.cliente;
                     document.getElementById('nome_razao').value = d.cliente || "";
                     document.getElementById('whatsapp').value = d.whatsapp || "";
                     document.getElementById('email').value = d.email || "";
                 }
-            } catch(e) {} finally { document.getElementById('txt-buscando').classList.add('hidden'); }
+            } catch(e) {
+                console.warn("Nao foi possivel buscar cliente pelo documento:", e);
+            } finally {
+                buscando.classList.add('hidden');
+            }
         };
 
         const setStatusStep = (textoInicial, textoSecundario, cor, delayMs = 2000) => {
@@ -253,9 +260,9 @@
             // 1. Consulta ao Firebase (com os 3 formatos para não falhar)
             try {
                 const [s1, s2, s3] = await Promise.all([
-                    getDocs(query(collection(db, "pedidos"), where("dataStr", "==", f1))),
-                    getDocs(query(collection(db, "pedidos"), where("dataStr", "==", f2))),
-                    getDocs(query(collection(db, "pedidos"), where("dataStr", "==", f3)))
+                    getDocs(query(collection(db, "disponibilidade_publica"), where("dataStr", "==", f1))),
+                    getDocs(query(collection(db, "disponibilidade_publica"), where("dataStr", "==", f2))),
+                    getDocs(query(collection(db, "disponibilidade_publica"), where("dataStr", "==", f3)))
                 ]);
                 
                 [s1, s2, s3].forEach(snap => {
@@ -273,8 +280,9 @@
             // 2. Consulta à Google Agenda (EXTERNOS)
             try {
                 const reqAg = await fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify({ acao: "VERIFICAR_AGENDA_DIA", dataBusca: f1 }) }).then(r => r.json());
-                if (reqAg.eventosExternos) {
-                    reqAg.eventosExternos.forEach(ex => {
+                const eventosAgenda = reqAg.eventosExternos || reqAg.eventos || reqAg.eventosAgenda || [];
+                if (eventosAgenda.length) {
+                    eventosAgenda.forEach(ex => {
                         window.concorrentesEncontrados.push({ 
                             id: 'ext_' + Math.random(),
                             status: 'CONFIRMADO', 
@@ -434,7 +442,7 @@
                 const docRef = await addDoc(collection(db, "pedidos"), dados);
                 
                 // Envia para a Google Agenda (criará a faixa amarela do Pré-reserva com o ID do documento atrelado se você quiser, mas aqui estou mandando os mesmos dados base)
-                fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify({ acao: "CRIAR_PRE_RESERVA_AGENDA", ...dados }) })
+                fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify({ acao: "CRIAR_PRE_RESERVA_AGENDA", pedidoId: docRef.id, ...dados }) })
                 .then(res => res.json())
                 .then(apiRes => {
                     // Após criar na agenda, guarda o ID da agenda lá no Firebase
