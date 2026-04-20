@@ -623,15 +623,35 @@ function erroGoogleStatus(error) {
   return Number(error?.code || error?.response?.status || error?.errors?.[0]?.code || 0);
 }
 
+function variantesAgendaId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+
+  const variantes = new Set([raw]);
+  if (raw.includes("@")) variantes.add(raw.split("@")[0]);
+  return [...variantes].filter(Boolean);
+}
+
+function adicionarVariantesAgenda(set, value) {
+  variantesAgendaId(value).forEach((item) => set.add(item));
+}
+
+function eventoRelacionadoPorIds(event, ids, icals = ids) {
+  const chaves = [
+    ...variantesAgendaId(event?.id),
+    ...variantesAgendaId(event?.iCalUID),
+  ];
+  return chaves.some((chave) => ids.has(chave) || icals.has(chave));
+}
+
 async function buscarEventoAgenda(calendar, agendaId) {
   const id = String(agendaId || "").trim();
   if (!id) return null;
 
   const calendarId = getCalendarId();
-  const tentativasGet = [id];
-  if (id.includes("@")) tentativasGet.push(id.split("@")[0]);
+  const tentativasGet = variantesAgendaId(id);
 
-  for (const eventId of [...new Set(tentativasGet)]) {
+  for (const eventId of tentativasGet) {
     try {
       const { data } = await calendar.events.get({ calendarId, eventId });
       if (data && data.status !== "cancelled") return data;
@@ -657,6 +677,25 @@ async function buscarEventoAgenda(calendar, agendaId) {
     }
     return null;
   }
+}
+
+async function buscarEventoPorAssinaturaPedido(calendar, pedido) {
+  const assinatura = assinaturaAgendaPedido(pedido);
+  if (!assinatura) return null;
+
+  const periodo = montarInicioFimAgenda(pedido);
+  const diaSeguinte = formatarDataIsoLocal(somarDiasData(periodo.data, 1));
+  const { data } = await calendar.events.list({
+    calendarId: getCalendarId(),
+    timeMin: `${periodo.dataIso}T00:00:00-03:00`,
+    timeMax: `${diaSeguinte}T00:00:00-03:00`,
+    singleEvents: true,
+    orderBy: "startTime",
+    showDeleted: false,
+    maxResults: 50,
+  });
+
+  return (data.items || []).find((event) => assinaturaAgendaEvento(event) === assinatura) || null;
 }
 
 async function deletarEventoAgenda(calendar, agendaId) {
@@ -710,7 +749,10 @@ async function sincronizarPedidoComAgenda(pedidoId, origem = "manual") {
     return { success: true, removido, status: "REMOVIDO" };
   }
 
-  const eventoExistente = agendaIdAtual ? await buscarEventoAgenda(calendar, agendaIdAtual) : null;
+  let eventoExistente = agendaIdAtual ? await buscarEventoAgenda(calendar, agendaIdAtual) : null;
+  if (!eventoExistente) {
+    eventoExistente = await buscarEventoPorAssinaturaPedido(calendar, pedido);
+  }
   const resource = recursoEventoAgenda(pedido, eventoExistente);
   let evento;
   let criado = false;
@@ -896,8 +938,10 @@ async function idsAgendaPedidosNaData(dataBusca) {
   snapshot.forEach((docSnap) => {
     const pedido = docSnap.data();
     if (!statusAtivoAgenda(pedido.status)) return;
-    if (pedido.agendaId) ids.add(String(pedido.agendaId));
-    if (pedido.agendaIcalUid) icals.add(String(pedido.agendaIcalUid));
+    adicionarVariantesAgenda(ids, pedido.agendaId);
+    adicionarVariantesAgenda(ids, pedido.agendaIcalUid);
+    adicionarVariantesAgenda(icals, pedido.agendaId);
+    adicionarVariantesAgenda(icals, pedido.agendaIcalUid);
   });
 
   return { ids, icals };
@@ -911,7 +955,7 @@ async function verificarAgendaDia(dataBusca) {
   const { ids, icals } = await idsAgendaPedidosNaData(dataBusca);
 
   const eventosExternos = eventos
-    .filter((event) => !ids.has(event.id) && !icals.has(event.iCalUID))
+    .filter((event) => !eventoRelacionadoPorIds(event, ids, icals))
     .map((event) => resumoEventoGoogle(event));
 
   return { success: true, eventosExternos, eventos: eventosExternos };
@@ -928,11 +972,58 @@ function pedidoDentroDoIntervalo(pedido, inicio, fim) {
 function chavesEventosGoogle(eventos) {
   const byId = new Map();
   const byIcal = new Map();
+  const byAssinatura = new Map();
+
   eventos.forEach((event) => {
-    if (event.id) byId.set(String(event.id), event);
-    if (event.iCalUID) byIcal.set(String(event.iCalUID), event);
+    variantesAgendaId(event.id).forEach((chave) => byId.set(chave, event));
+    variantesAgendaId(event.iCalUID).forEach((chave) => byIcal.set(chave, event));
+    const assinatura = assinaturaAgendaEvento(event);
+    if (assinatura) byAssinatura.set(assinatura, event);
   });
-  return { byId, byIcal };
+
+  return { byId, byIcal, byAssinatura };
+}
+
+function normalizarChaveAgenda(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function assinaturaAgendaPedido(pedido) {
+  try {
+    const periodo = montarInicioFimAgenda(pedido);
+    return `${periodo.dataIso}|${periodo.inicio}|${normalizarChaveAgenda(tituloAgendaPedido(pedido))}`;
+  } catch (error) {
+    return "";
+  }
+}
+
+function assinaturaAgendaEvento(event) {
+  const inicio = partesLocaisEventoGoogle(event?.start?.dateTime || event?.start?.date);
+  if (!inicio) return "";
+
+  const dataIso = `${String(inicio.ano).padStart(4, "0")}-${String(inicio.mes).padStart(2, "0")}-${String(inicio.dia).padStart(2, "0")}`;
+  const hora = `${String(inicio.hora).padStart(2, "0")}:${String(inicio.minuto).padStart(2, "0")}`;
+  return `${dataIso}|${hora}|${normalizarChaveAgenda(event?.summary)}`;
+}
+
+function buscarEventoGoogleDoPedido(pedido, maps) {
+  const chaves = [
+    ...variantesAgendaId(pedido.agendaId),
+    ...variantesAgendaId(pedido.agendaIcalUid),
+  ];
+
+  for (const chave of chaves) {
+    const evento = maps.byId.get(chave) || maps.byIcal.get(chave);
+    if (evento) return evento;
+  }
+
+  const assinatura = assinaturaAgendaPedido(pedido);
+  return assinatura ? maps.byAssinatura.get(assinatura) || null : null;
 }
 
 function eventoEsperadoDiverge(pedido, evento) {
@@ -973,25 +1064,28 @@ async function conferirAgenda() {
     if (pedidoDentroDoIntervalo(pedido, agora, fimAno)) pedidos.push(pedido);
   });
 
-  const idsPedidosAgenda = new Set();
-  const icalsPedidosAgenda = new Set();
+  const chavesPedidosAgenda = new Set();
+  const assinaturasPedidosAgenda = new Set();
   pedidos.forEach((pedido) => {
-    if (pedido.agendaId) idsPedidosAgenda.add(String(pedido.agendaId));
-    if (pedido.agendaIcalUid) icalsPedidosAgenda.add(String(pedido.agendaIcalUid));
+    adicionarVariantesAgenda(chavesPedidosAgenda, pedido.agendaId);
+    adicionarVariantesAgenda(chavesPedidosAgenda, pedido.agendaIcalUid);
+    const assinatura = assinaturaAgendaPedido(pedido);
+    if (assinatura) assinaturasPedidosAgenda.add(assinatura);
   });
 
   const manuais = eventosGoogle
-    .filter((event) => !idsPedidosAgenda.has(event.id) && !icalsPedidosAgenda.has(event.iCalUID))
+    .filter((event) => {
+      if (eventoRelacionadoPorIds(event, chavesPedidosAgenda)) return false;
+      const assinatura = assinaturaAgendaEvento(event);
+      return !assinatura || !assinaturasPedidosAgenda.has(assinatura);
+    })
     .map((event) => resumoEventoGoogle(event));
 
   const ausentes = [];
   const divergentes = [];
 
   pedidos.forEach((pedido) => {
-    const evento = (pedido.agendaId && maps.byId.get(String(pedido.agendaId)))
-      || (pedido.agendaId && maps.byIcal.get(String(pedido.agendaId)))
-      || (pedido.agendaIcalUid && maps.byIcal.get(String(pedido.agendaIcalUid)))
-      || null;
+    const evento = buscarEventoGoogleDoPedido(pedido, maps);
 
     if (!evento) {
       ausentes.push({
