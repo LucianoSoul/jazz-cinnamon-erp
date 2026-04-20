@@ -556,8 +556,246 @@ function pedidoParaFormulario(pedido) {
 
 function timestampMillis(value) {
   if (value?.toMillis) return value.toMillis();
+  if (value?.seconds) return Number(value.seconds) * 1000;
   const parsed = new Date(value || 0).getTime();
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function numeroFinanceiro(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const raw = String(value ?? "").trim();
+  if (!raw) return 0;
+  const normalized = raw
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\.(?=\d{3}(?:\D|$))/g, "")
+    .replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function arredondarNumero(value, casas = 2) {
+  const fator = 10 ** casas;
+  return Math.round((Number(value) || 0) * fator) / fator;
+}
+
+function partesDataLocal(value) {
+  const millis = timestampMillis(value);
+  if (!millis) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: CALENDAR_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(millis)).reduce((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return {
+    ano: Number(parts.year),
+    mes: Number(parts.month),
+    dia: Number(parts.day),
+  };
+}
+
+function dataIsoOuVazio(value) {
+  const millis = timestampMillis(value);
+  return millis ? new Date(millis).toISOString() : "";
+}
+
+function normalizarStatusConversao(status) {
+  const raw = String(status || "PRE_RESERVA")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\s-]+/g, "_")
+    .toUpperCase();
+  if (raw === "PRE_RESERVA" || raw === "PRE") return "PRE_RESERVA";
+  if (raw === "RESERVA") return "RESERVA";
+  if (raw === "CONFIRMADO") return "CONFIRMADO";
+  if (raw === "REPROVADO") return "REPROVADO";
+  return raw || "PRE_RESERVA";
+}
+
+function dataInsercaoLeadPedido(pedido) {
+  return pedido.data_insercao_lead
+    || pedido.dataInsercaoLead
+    || pedido.criadoEm
+    || pedido.createdAt
+    || pedido.dataCriacao
+    || null;
+}
+
+function dataEnvioOrcamentoPedido(pedido) {
+  const direta = pedido.data_envio_orcamento
+    || pedido.dataEnvioOrcamento
+    || pedido.orcamentoEnviadoEm
+    || pedido.orcamentoGeradoEm
+    || null;
+  if (direta) return direta;
+
+  const anexos = Array.isArray(pedido.anexos) ? pedido.anexos : [];
+  const orcamentos = anexos
+    .filter((anexo) => normalizarChaveAgenda(anexo?.nome).startsWith("ORCAMENTO"))
+    .map((anexo) => anexo.data || anexo.criadoEm || anexo.createdAt)
+    .filter((data) => timestampMillis(data))
+    .sort((a, b) => timestampMillis(a) - timestampMillis(b));
+
+  return orcamentos[0] || null;
+}
+
+function gerarInsightsConversao({ funil, receita, sla }) {
+  const insights = [];
+
+  if (funil.total_leads === 0) {
+    insights.push("Nenhum lead inserido neste periodo.");
+    return insights;
+  }
+
+  if (funil.taxa_conversao > 30) {
+    insights.push("Taxa de conversao acima de 30% (excelente desempenho).");
+  } else if (funil.taxa_conversao >= 15) {
+    insights.push("Taxa de conversao intermediaria: vale revisar follow-up e proposta.");
+  } else {
+    insights.push("Taxa de conversao baixa: existe oportunidade de melhorar abordagem e velocidade de resposta.");
+  }
+
+  if (funil.taxa_rejeicao >= 35) {
+    insights.push("Taxa de rejeicao alta: investigue motivos de perda e ajuste oferta/comunicacao.");
+  }
+
+  if (sla.tempo_medio_resposta_horas > 24) {
+    insights.push("Tempo medio de resposta alto pode estar impactando conversoes.");
+  } else if (sla.tempo_medio_resposta_horas > 0 && sla.tempo_medio_resposta_horas <= 6) {
+    insights.push("Resposta comercial rapida: bom sinal para conversao de leads.");
+  }
+
+  if (sla.total_leads_sem_resposta > 0) {
+    insights.push(`${sla.total_leads_sem_resposta} lead(s) ainda sem resposta registrada.`);
+  }
+
+  if (receita.receita_perdida > receita.receita_fechada && receita.receita_perdida > 0) {
+    insights.push("Alto volume de receita perdida indica oportunidade de remarketing.");
+  }
+
+  if (receita.receita_pendente > receita.receita_fechada) {
+    insights.push("Pipeline pendente maior que a receita fechada: priorize follow-up dos leads e reservas.");
+  }
+
+  return insights;
+}
+
+async function calcularDadosConversao(mes, ano) {
+  const mesNum = Number(mes);
+  const anoNum = Number(ano);
+  if (!Number.isInteger(mesNum) || mesNum < 1 || mesNum > 12 || !Number.isInteger(anoNum)) {
+    throw new Error("PARAMETROS_INVALIDOS");
+  }
+
+  const snapshot = await db.collection("pedidos").get();
+  const registros = [];
+
+  snapshot.forEach((docSnap) => {
+    const pedido = { id: docSnap.id, ...docSnap.data() };
+    const dataLead = dataInsercaoLeadPedido(pedido);
+    const partes = partesDataLocal(dataLead);
+    if (!partes || partes.mes !== mesNum || partes.ano !== anoNum) return;
+
+    const status = normalizarStatusConversao(pedido.status_evento || pedido.status);
+    if (status === "LIXEIRA") return;
+
+    const dataEnvio = dataEnvioOrcamentoPedido(pedido);
+    const valor = numeroFinanceiro(pedido.valor_orcamento ?? pedido.valor ?? pedido.valor_final_contrato);
+
+    registros.push({
+      id: pedido.id,
+      cliente: safeText(pedido.cliente || pedido.nome_contratante_formal, "Cliente"),
+      whatsapp: String(pedido.whatsapp || ""),
+      tipo_evento: safeText(pedido.tipo_evento || pedido.tipo, "EVENTO"),
+      data_evento: pedido.dataStr || pedido.data || "",
+      data_insercao_lead: dataLead,
+      data_envio_orcamento: dataEnvio,
+      status_evento: status,
+      valor_orcamento: valor,
+      motivo_reprovacao: pedido.motivo_reprovacao || pedido.motivoReprovacao || "",
+      motivo_reprovacao_observacao: pedido.motivo_reprovacao_observacao || "",
+    });
+  });
+
+  const totalLeads = registros.length;
+  const totalReservas = registros.filter((item) => item.status_evento === "RESERVA").length;
+  const totalConfirmados = registros.filter((item) => item.status_evento === "CONFIRMADO").length;
+  const totalReprovados = registros.filter((item) => item.status_evento === "REPROVADO").length;
+  const reservasEConfirmados = totalReservas + totalConfirmados;
+
+  const receitaFechada = registros
+    .filter((item) => item.status_evento === "CONFIRMADO")
+    .reduce((acc, item) => acc + item.valor_orcamento, 0);
+  const receitaPendente = registros
+    .filter((item) => ["PRE_RESERVA", "RESERVA"].includes(item.status_evento))
+    .reduce((acc, item) => acc + item.valor_orcamento, 0);
+  const receitaPerdida = registros
+    .filter((item) => item.status_evento === "REPROVADO")
+    .reduce((acc, item) => acc + item.valor_orcamento, 0);
+
+  const temposResposta = registros
+    .map((item) => {
+      const inicio = timestampMillis(item.data_insercao_lead);
+      const envio = timestampMillis(item.data_envio_orcamento);
+      if (!inicio || !envio || envio < inicio) return null;
+      return (envio - inicio) / (1000 * 60 * 60);
+    })
+    .filter((value) => Number.isFinite(value));
+
+  const tempoMedioResposta = temposResposta.length
+    ? temposResposta.reduce((acc, value) => acc + value, 0) / temposResposta.length
+    : 0;
+
+  const funil = {
+    total_leads: totalLeads,
+    total_reservas: totalReservas,
+    total_confirmados: totalConfirmados,
+    total_reprovados: totalReprovados,
+    taxa_conversao: totalLeads ? arredondarNumero((totalConfirmados / totalLeads) * 100) : 0,
+    taxa_rejeicao: totalLeads ? arredondarNumero((totalReprovados / totalLeads) * 100) : 0,
+    taxa_lead_para_reserva: totalLeads ? arredondarNumero((reservasEConfirmados / totalLeads) * 100) : 0,
+    taxa_reserva_para_confirmado: reservasEConfirmados ? arredondarNumero((totalConfirmados / reservasEConfirmados) * 100) : 0,
+  };
+
+  const receita = {
+    receita_fechada: arredondarNumero(receitaFechada),
+    receita_pendente: arredondarNumero(receitaPendente),
+    receita_perdida: arredondarNumero(receitaPerdida),
+  };
+
+  const sla = {
+    tempo_medio_resposta_horas: arredondarNumero(tempoMedioResposta),
+    total_leads_sem_resposta: registros.filter((item) => !timestampMillis(item.data_envio_orcamento)).length,
+  };
+
+  const perdasTop5 = registros
+    .filter((item) => item.status_evento === "REPROVADO")
+    .sort((a, b) => b.valor_orcamento - a.valor_orcamento)
+    .slice(0, 5)
+    .map((item) => ({
+      cliente: item.cliente,
+      valor: arredondarNumero(item.valor_orcamento),
+      data: dataIsoOuVazio(item.data_insercao_lead),
+      data_evento: item.data_evento,
+      tipo_evento: item.tipo_evento,
+      whatsapp: item.whatsapp,
+      motivo_reprovacao: item.motivo_reprovacao,
+      motivo_reprovacao_observacao: item.motivo_reprovacao_observacao,
+    }));
+
+  return {
+    success: true,
+    mes: mesNum,
+    ano: anoNum,
+    funil,
+    receita,
+    sla,
+    perdas_top5: perdasTop5,
+    insights: gerarInsightsConversao({ funil, receita, sla }),
+  };
 }
 
 async function buscarClientePorDocumento(documentoLimpo) {
@@ -1184,6 +1422,35 @@ async function exigirAdminAgenda(req) {
   if (!ADMIN_EMAILS.includes(email)) throw new Error("NAO_AUTORIZADO");
   return decoded;
 }
+
+exports.getDadosConversao = onRequest({
+  region: REGION,
+}, async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
+  }
+
+  if (req.method !== "POST") {
+    sendJson(res, 405, { success: false, error: "Metodo nao permitido." });
+    return;
+  }
+
+  try {
+    await exigirAdminAgenda(req);
+    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const resultado = await calcularDadosConversao(body.mes, body.ano);
+    sendJson(res, 200, resultado);
+  } catch (error) {
+    logger.error("Erro em getDadosConversao.", error);
+    const code = error.message === "NAO_AUTORIZADO" ? 403 : (error.message === "PARAMETROS_INVALIDOS" ? 400 : 500);
+    sendJson(res, code, { success: false, error: error.message || "Erro interno." });
+  }
+});
 
 exports.linkPublico = onRequest({
   region: REGION,
