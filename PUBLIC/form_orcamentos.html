@@ -123,15 +123,13 @@
     <!-- SCRIPT FIREBASE -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // URL do Google Apps Script (Mantida do original)
-        const URL_BACKEND = "https://script.google.com/macros/s/AKfycbx9NsoG0R-NNtbECB-Qw96YDcZaexKDmbfH90vIiXzwElYALIJBO5NdUC9tCuO4AXUh/exec";
+        import { getFirestore, collection, addDoc, serverTimestamp, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyBoQvjJ_j_OO6uNbW0ar-rzRiiMR2Xe8m4", authDomain: "jazz-cinnamon-erp.firebaseapp.com", projectId: "jazz-cinnamon-erp", storageBucket: "jazz-cinnamon-erp.firebasestorage.app", messagingSenderId: "359043770756", appId: "1:359043770756:web:a5a4eec50e6e40f0ebd5d1" };
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const LINK_API = `https://southamerica-east1-${firebaseConfig.projectId}.cloudfunctions.net/linkPublico`;
+        const AGENDA_API = `https://southamerica-east1-${firebaseConfig.projectId}.cloudfunctions.net/agendaApi`;
 
         window.estadoAgenda = "LIVRE";
         window.concorrentesEncontrados = [];
@@ -279,7 +277,11 @@
 
             // 2. Consulta à Google Agenda (EXTERNOS)
             try {
-                const reqAg = await fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify({ acao: "VERIFICAR_AGENDA_DIA", dataBusca: f1 }) }).then(r => r.json());
+                const reqAg = await fetch(AGENDA_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ acao: "VERIFICAR_AGENDA_DIA", dataBusca: f1 })
+                }).then(r => r.json());
                 const eventosAgenda = reqAg.eventosExternos || reqAg.eventos || reqAg.eventosAgenda || [];
                 if (eventosAgenda.length) {
                     eventosAgenda.forEach(ex => {
@@ -441,15 +443,11 @@
                 // Envia para o Firebase
                 const docRef = await addDoc(collection(db, "pedidos"), dados);
                 
-                // Envia para a Google Agenda (criará a faixa amarela do Pré-reserva com o ID do documento atrelado se você quiser, mas aqui estou mandando os mesmos dados base)
-                fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify({ acao: "CRIAR_PRE_RESERVA_AGENDA", pedidoId: docRef.id, ...dados }) })
-                .then(res => res.json())
-                .then(apiRes => {
-                    // Após criar na agenda, guarda o ID da agenda lá no Firebase
-                    if(apiRes.success && apiRes.eventId) {
-                        updateDoc(doc(db, "pedidos", docRef.id), { agendaId: apiRes.eventId });
-                    }
-                });
+                fetch(AGENDA_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ acao: "SINCRONIZAR_PEDIDO_PUBLICO", pedidoId: docRef.id })
+                }).catch(e => console.error("Erro ao sincronizar Agenda:", e));
                 
                 document.getElementById('formCliente').classList.add('hidden'); document.getElementById('sucesso-cliente').classList.remove('hidden');
             } catch (err) { Swal.fire("Erro", "Falha ao enviar a solicitação.", "error"); } 

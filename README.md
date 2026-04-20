@@ -25,6 +25,25 @@ Configure `functions/.env` a partir de `functions/.env.example` antes do deploy:
 VAPID_PUBLIC_KEY=sua-chave-publica-web-push
 VAPID_SUBJECT=mailto:luciano.cinnamon@gmail.com
 PANEL_URL=https://jazz-cinnamon-erp.web.app/painel_erp.html
+GOOGLE_CALENDAR_ID=77ee282b8071d0ae9ed2cfb27ef8260acb93c76bc27dc96a2efc60cf32445e43@group.calendar.google.com
 ```
 
 A chave privada Web Push fica no Secret Manager como `VAPID_PRIVATE_KEY`.
+
+## Google Agenda
+
+A Agenda saiu do Apps Script. As funcoes `agendaApi` e `sincronizarAgendaPedido` usam a Google Calendar API para criar, atualizar, excluir e auditar eventos.
+
+Antes de testar em producao, compartilhe a agenda da banda com permissao de alteracao para a service account padrao das Cloud Functions:
+
+```text
+359043770756-compute@developer.gserviceaccount.com
+```
+
+Se o ambiente estiver usando a service account do App Engine, compartilhe tambem:
+
+```text
+jazz-cinnamon-erp@appspot.gserviceaccount.com
+```
+
+O botao `Sincronizar Agenda` compara o ERP com o Google Agenda de agora ate 31/12 do ano corrente, mostra eventos manuais, eventos ausentes na agenda e divergencias de titulo/status/cor/horario/local.

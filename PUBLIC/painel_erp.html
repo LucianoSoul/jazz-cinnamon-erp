@@ -423,6 +423,7 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const AGENDA_API = `https://southamerica-east1-${firebaseConfig.projectId}.cloudfunctions.net/agendaApi`;
         const ADMIN_EMAILS = ["luciano.cinnamon@gmail.com"];
         const VAPID_PUBLIC_KEY = "BFrhKIqmrEzOqSAncFj9M6fI8j1IZmqgnoUJVI-Xi47rQZVoV1qyyeC_BzaVsAClUsU53lqzncTeVpXxWUGUSXI";
 
@@ -443,6 +444,34 @@
             return !!user && !user.isAnonymous && ADMIN_EMAILS.includes(emailUsuario);
         };
 
+        window.chamarAgendaApi = async (acao, payload = {}, exigeAuth = true) => {
+            const headers = { 'Content-Type': 'application/json' };
+            if(exigeAuth) {
+                const user = auth.currentUser;
+                if(!isAdminUser(user)) throw new Error('Sessao administrativa expirada.');
+                headers.Authorization = `Bearer ${await user.getIdToken()}`;
+            }
+
+            const response = await fetch(AGENDA_API, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ acao, ...payload })
+            });
+            const json = await response.json().catch(() => ({}));
+            if(!response.ok || json.success === false) throw new Error(json.error || 'Falha ao comunicar com a Agenda.');
+            return json;
+        };
+
+        window.sincronizarPedidoAgenda = async (pedidoId) => {
+            const res = await window.chamarAgendaApi('AGENDA_SINCRONIZAR_PEDIDO', { pedidoId });
+            const ev = window.dadosGlobais.find(item => item.id === pedidoId);
+            if(ev && res.agendaId) {
+                ev.agendaId = res.agendaId;
+                ev.agendaIcalUid = res.agendaIcalUid || ev.agendaIcalUid || '';
+            }
+            return res;
+        };
+
         // UTILITÁRIOS
         window.safeNum = (val) => val ? (typeof val === 'number' ? val : parseFloat(String(val).replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]+/g, "")) || 0) : 0;
         window.fmtMoeda_n = (v) => window.safeNum(v).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
@@ -461,6 +490,7 @@
             return `${String(Math.floor(totalM / 60) % 24).padStart(2, '0')}:${String(totalM % 60).padStart(2, '0')}`; 
         };
         window.escapeStr = (s) => s ? String(s).replace(/'/g, "\\'").replace(/"/g, "&quot;") : "";
+        window.escapeHtml = (s) => String(s || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
         window.formatarMoedaParaInput = (i) => { let v = i.value.replace(/\D/g,""); v = (v/100).toFixed(2)+""; v = v.replace(".",",").replace(/(\d)(\d{3})(\d{3}),/g,"$1.$2.$3,").replace(/(\d)(\d{3}),/g,"$1.$2,"); i.value = "R$ "+v; };
         window.formatarCpfCnpj = (i) => { let v = i.value.replace(/\D/g, ""); if (v.length <= 11) { v = v.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2"); } else { v = v.substring(0, 14).replace(/^(\d{2})(\d)/, "$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d)/, "$1-$2"); } i.value = v; };
         window.compilarAnexos = (ev) => { if(!ev) return []; let raw = []; if(ev.anexos) { if(Array.isArray(ev.anexos)) raw = [...ev.anexos]; else Object.values(ev.anexos).forEach(a => raw.push(a)); } return raw; };
@@ -1321,26 +1351,7 @@
                 await updateDoc(doc(db, "pedidos", ev.id), { local: novoLocal });
                 ev.local = novoLocal; 
                 
-                // Fire update to Google Calendar to ensure sync
-                if(ev.agendaId) {
-                    await fetch(URL_BACKEND, { 
-                        method: 'POST', 
-                        body: JSON.stringify({ 
-                            acao: "ATUALIZAR_DADOS_AGENDA", 
-                            agendaId: ev.agendaId, 
-                            dataStr: ev.dataStr, 
-                            horaInicio: ev.horaInicio, 
-                            horaTermino: window.horaTerminoCalculado(ev.horaInicio, ev.duracao), 
-                            duracao: ev.duracao,
-                            cliente: ev.cliente,
-                            tipo: ev.tipo,
-                            status: ev.status,
-                            local: novoLocal,
-                            cidade: ev.cidade,
-                            uf: ev.uf
-                        }) 
-                    });
-                }
+                await window.sincronizarPedidoAgenda(ev.id);
                 
                 Swal.fire({icon: 'success', title: 'Local Salvo!', text: 'Atualizado no sistema e no Google Agenda.', timer: 2000, showConfirmButton: false, background: '#1a1d24'});
                 
@@ -1364,8 +1375,16 @@
         window.abrirNotificacoes = () => { window.atualizarBotaoPush(); document.getElementById('side-notificacoes').classList.add('open'); document.getElementById('menu-overlay').classList.add('open'); };
         window.fazerLogout = async () => { await signOut(auth); window.location.replace('index.html'); };
 
-        window.carimbarEvento = () => {
-            // Futura implementação se necessário
+        window.carimbarEvento = async () => {
+            const id = document.getElementById('uni-id')?.value;
+            if(!id) return;
+            Swal.fire({title:'Sincronizando Agenda...', didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff', allowOutsideClick: false});
+            try {
+                await window.sincronizarPedidoAgenda(id);
+                Swal.fire({icon:'success', title:'Agenda sincronizada', timer:1500, showConfirmButton:false, background:'#1a1d24', color:'#fff'});
+            } catch(e) {
+                Swal.fire('Erro', e.message || 'Falha ao sincronizar Agenda.', 'error');
+            }
         };
 
         // RELATÓRIOS E AÇÕES BASE BLINDADAS
@@ -1632,27 +1651,7 @@
                 // 1. Atualiza instantaneamente no Firebase (UI reage na hora)
                 await updateDoc(doc(db, "pedidos", id), {status: s}); 
                 
-                // 2. Busca o evento e avisa o Google Agenda em segundo plano
-                const ev = window.dadosGlobais.find(e => e.id === id);
-                if (ev && ev.agendaId) {
-                    fetch(URL_BACKEND, { 
-                        method: 'POST', 
-                        body: JSON.stringify({ 
-                            acao: "ATUALIZAR_DADOS_AGENDA", 
-                            agendaId: ev.agendaId, 
-                            dataStr: ev.dataStr, 
-                            horaInicio: ev.horaInicio, 
-                            horaTermino: window.horaTerminoCalculado(ev.horaInicio, ev.duracao), 
-                            duracao: ev.duracao,
-                            cliente: ev.cliente,
-                            tipo: ev.tipo,
-                            status: s, // <-- O novo status que muda a cor na agenda
-                            local: ev.local || '',
-                            cidade: ev.cidade || '',
-                            uf: ev.uf || ''
-                        }) 
-                    }).catch(e => console.error("Erro silencioso ao atualizar Agenda:", e));
-                }
+                await window.sincronizarPedidoAgenda(id);
             } catch(e) { 
                 console.error(e); 
             } 
@@ -1668,13 +1667,7 @@
                     // 1. Atualiza no Firebase
                     await updateDoc(doc(db, "pedidos", id), {status:'REPROVADO'}); 
                     
-                    // 2. Remove do Google Agenda (dispara comandos para o Apps Script)
-                    if (ev && ev.agendaId) {
-                        // Envia o comando explícito de exclusão
-                        await fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify({ acao: "EXCLUIR_EVENTO_AGENDA", agendaId: ev.agendaId }) }).catch(()=>{});
-                        // Envia atualização de status para REPROVADO como redundância de segurança para o seu Script
-                        await fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify({ acao: "ATUALIZAR_DADOS_AGENDA", agendaId: ev.agendaId, status: 'REPROVADO' }) }).catch(()=>{});
-                    }
+                    await window.sincronizarPedidoAgenda(id);
                     
                     Swal.fire({icon: 'success', title: 'Excluído!', timer: 1500, showConfirmButton: false, background: '#1a1d24'});
                 } catch(e) {
@@ -1723,28 +1716,14 @@
                 await updateDoc(doc(db, "pedidos", id), payload); 
                 
                 // SINCRONIZAÇÃO EM TEMPO REAL COM A AGENDA
-                const idAgenda = document.getElementById('uni-agenda-id').value;
-                if(idAgenda) {
-                    try {
-                        const resUpdate = await fetch(URL_BACKEND, { 
-                            method: 'POST', 
-                            body: JSON.stringify({ 
-                                acao: "ATUALIZAR_DADOS_AGENDA", 
-                                agendaId: idAgenda, 
-                                dataStr: payload.dataStr, 
-                                horaInicio: payload.horaInicio, 
-                                horaTermino: payload.horaTermino, 
-                                duracao: payload.duracao,
-                                cliente: payload.cliente,
-                                tipo: document.getElementById('uni-tipo').value,
-                                status: window.dadosGlobais.find(e => e.id === id)?.status || 'PRE_RESERVA' 
-                            }) 
-                        }).then(r=>r.json());
-                        
-                        if(resUpdate.newEventId) {
-                            await updateDoc(doc(db, "pedidos", id), { agendaId: resUpdate.newEventId });
-                        }
-                    } catch (e) { console.error('Erro silencioso na Agenda', e); }
+                try {
+                    const resUpdate = await window.sincronizarPedidoAgenda(id);
+                    if(resUpdate.agendaId && document.getElementById('uni-agenda-id')) {
+                        document.getElementById('uni-agenda-id').value = resUpdate.agendaId;
+                    }
+                } catch (e) {
+                    console.error('Erro na Agenda', e);
+                    throw e;
                 }
 
                 if (modoPdf) {
@@ -1777,7 +1756,108 @@
             } 
         };
 
-        window.salvarDiretoAgenda = (id) => { Swal.fire({title:'Sincronizando...', didOpen:()=>Swal.showLoading(), background:'#1a1d24'}); setTimeout(()=>Swal.fire({icon:'success', title:'Agenda Sincronizada', background:'#1a1d24'}), 1500); };
+        window.salvarDiretoAgenda = async (id) => {
+            Swal.fire({title:'Sincronizando Agenda...', didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff', allowOutsideClick:false});
+            try {
+                await window.sincronizarPedidoAgenda(id);
+                Swal.fire({icon:'success', title:'Agenda Sincronizada', timer:1500, showConfirmButton:false, background:'#1a1d24', color:'#fff'});
+            } catch(e) {
+                Swal.fire('Erro', e.message || 'Nao foi possivel sincronizar a Agenda.', 'error');
+            }
+        };
+
+        window.renderCardSyncAgenda = (tipo, item) => {
+            const titulo = window.escapeHtml(item.titulo || item.cliente || 'Evento');
+            const data = window.escapeHtml(window.formatarDataExibicao(item.dataStr) || item.dataStr || '');
+            const hora = window.escapeHtml(item.horaInicio || '--:--');
+            const local = window.escapeHtml(item.local || item.cidade || 'Sem local');
+            const criador = window.escapeHtml(item.criadorNome || '');
+            const status = window.escapeHtml(item.status || '');
+
+            if(tipo === 'manual') {
+                return `<div class="bg-[#111318] border border-[#2a2e39] rounded-lg p-3 text-left">
+                    <div class="text-[10px] font-black text-[#d4af37] uppercase mb-1">Evento manual na Google Agenda</div>
+                    <div class="text-xs font-bold text-white">${titulo}</div>
+                    <div class="text-[10px] text-gray-400 mt-1">${data} • ${hora} • ${local}</div>
+                    <div class="text-[10px] text-gray-500 mt-1">Criado por: ${criador || 'Google Agenda'} • Status sugerido: ${status}</div>
+                    <button onclick="window.importarEventoAgendaManual('${window.escapeStr(item.eventId)}')" class="mt-3 w-full bg-[#d4af37] text-black rounded py-2 text-[10px] font-black uppercase">Adicionar ao ERP</button>
+                </div>`;
+            }
+
+            if(tipo === 'ausente') {
+                return `<div class="bg-red-950/20 border border-red-900/60 rounded-lg p-3 text-left">
+                    <div class="text-[10px] font-black text-red-300 uppercase mb-1">Evento no ERP ausente na agenda</div>
+                    <div class="text-xs font-bold text-white">${titulo}</div>
+                    <div class="text-[10px] text-gray-400 mt-1">${data} • ${hora} • ${status}</div>
+                    <button onclick="window.incluirPedidoAusenteAgenda('${window.escapeStr(item.pedidoId || item.id)}')" class="mt-3 w-full border border-[#d4af37] text-[#d4af37] rounded py-2 text-[10px] font-black uppercase">Incluir na Agenda</button>
+                </div>`;
+            }
+
+            return `<div class="bg-amber-950/20 border border-amber-900/60 rounded-lg p-3 text-left">
+                <div class="text-[10px] font-black text-amber-300 uppercase mb-1">Agenda divergente</div>
+                <div class="text-xs font-bold text-white">${titulo}</div>
+                <div class="text-[10px] text-gray-400 mt-1">${data} • ${hora} • ${status}</div>
+                <div class="text-[10px] text-gray-500 mt-1">${window.escapeHtml((item.divergencias || []).join(', '))}</div>
+                <button onclick="window.corrigirDivergenciaAgenda('${window.escapeStr(item.pedidoId || item.id)}')" class="mt-3 w-full border border-[#d4af37] text-[#d4af37] rounded py-2 text-[10px] font-black uppercase">Corrigir Agenda</button>
+            </div>`;
+        };
+
+        window.verificarIntegridadeAgenda = async () => {
+            Swal.fire({title:'Sincronizando Agenda...', html:'A comparar ERP e Google Agenda ate o fim do ano.', didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff', allowOutsideClick:false});
+            try {
+                const res = await window.chamarAgendaApi('AGENDA_CONFERIR');
+                const total = (res.manuais || []).length + (res.ausentes || []).length + (res.divergentes || []).length;
+                if(!total) {
+                    Swal.fire({icon:'success', title:'Agenda integra', text:'Nenhuma divergencia encontrada ate o fim do ano.', background:'#1a1d24', color:'#fff'});
+                    return;
+                }
+
+                let html = `<div class="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
+                    <div class="text-[11px] text-gray-400 text-left mb-2">Encontrado: ${res.manuais?.length || 0} manual, ${res.ausentes?.length || 0} ausente, ${res.divergentes?.length || 0} divergente.</div>`;
+                (res.manuais || []).forEach(item => html += window.renderCardSyncAgenda('manual', item));
+                (res.ausentes || []).forEach(item => html += window.renderCardSyncAgenda('ausente', item));
+                (res.divergentes || []).forEach(item => html += window.renderCardSyncAgenda('divergente', item));
+                html += '</div>';
+
+                Swal.fire({
+                    title: '<span class="text-sm uppercase tracking-widest">Sincronizar Agenda</span>',
+                    html,
+                    width: 520,
+                    showConfirmButton: false,
+                    showCloseButton: true,
+                    background:'#1a1d24',
+                    color:'#fff'
+                });
+            } catch(e) {
+                Swal.fire('Erro', e.message || 'Nao foi possivel conferir a Agenda.', 'error');
+            }
+        };
+
+        window.importarEventoAgendaManual = async (eventId) => {
+            Swal.fire({title:'Importando evento...', didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff', allowOutsideClick:false});
+            try {
+                await window.chamarAgendaApi('AGENDA_IMPORTAR_EVENTO', { eventId });
+                await Swal.fire({icon:'success', title:'Evento adicionado ao ERP', timer:1500, showConfirmButton:false, background:'#1a1d24', color:'#fff'});
+                window.verificarIntegridadeAgenda();
+            } catch(e) {
+                Swal.fire('Erro', e.message || 'Nao foi possivel importar o evento.', 'error');
+            }
+        };
+
+        window.incluirPedidoAusenteAgenda = async (pedidoId) => {
+            await window.corrigirDivergenciaAgenda(pedidoId);
+        };
+
+        window.corrigirDivergenciaAgenda = async (pedidoId) => {
+            Swal.fire({title:'Atualizando Google Agenda...', didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff', allowOutsideClick:false});
+            try {
+                await window.sincronizarPedidoAgenda(pedidoId);
+                await Swal.fire({icon:'success', title:'Agenda atualizada', timer:1500, showConfirmButton:false, background:'#1a1d24', color:'#fff'});
+                window.verificarIntegridadeAgenda();
+            } catch(e) {
+                Swal.fire('Erro', e.message || 'Nao foi possivel atualizar a Agenda.', 'error');
+            }
+        };
         
         // === DOCUMENTOS E ANEXOS ===
         window.excluirAnexo = async (id, index, urlAnexo) => {

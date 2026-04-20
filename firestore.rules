@@ -94,14 +94,6 @@ service cloud.firestore {
         && request.resource.data.criadoEm == request.time;
     }
 
-    function isRecentAgendaIdPatch() {
-      return resource.data.criadoEm is timestamp
-        && request.time < resource.data.criadoEm + duration.value(30, 'm')
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['agendaId'])
-        && request.resource.data.agendaId is string
-        && request.resource.data.agendaId.size() <= 220;
-    }
-
     function isPublicLinkedPedido() {
       return !(resource.data.status in ['REPROVADO', 'LIXEIRA']);
     }
@@ -153,7 +145,6 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow create: if isAdmin() || isPublicPedidoCreate();
       allow update: if isAdmin()
-        || isRecentAgendaIdPatch()
         || isPublicContractPatch()
         || isPublicNfPatch()
         || isPublicContractAttachmentPatch();
