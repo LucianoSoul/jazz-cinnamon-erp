@@ -631,6 +631,29 @@ function dataEnvioOrcamentoPedido(pedido) {
     || null;
 }
 
+function dataReservaPedido(pedido) {
+  return pedido.data_reserva
+    || pedido.dataReserva
+    || pedido.data_envio_orcamento
+    || pedido.dataEnvioOrcamento
+    || pedido.orcamentoEnviadoEm
+    || null;
+}
+
+function dataConfirmacaoPedido(pedido) {
+  return pedido.data_confirmacao
+    || pedido.dataConfirmacao
+    || pedido.confirmadoEm
+    || null;
+}
+
+function dataReprovacaoPedido(pedido) {
+  return pedido.data_reprovacao
+    || pedido.dataReprovacao
+    || pedido.reprovadoEm
+    || null;
+}
+
 function ehLeadComercialConversao(pedido) {
   const origem = String(pedido.origem || "").toLowerCase();
   if (["google_calendar", "google_calendar_manual"].includes(origem)) return false;
@@ -638,7 +661,7 @@ function ehLeadComercialConversao(pedido) {
   return true;
 }
 
-function gerarInsightsConversao({ funil, receita, sla }) {
+function gerarInsightsConversao({ funil, receita, atendimento }) {
   const insights = [];
 
   if (funil.total_leads === 0) {
@@ -646,26 +669,30 @@ function gerarInsightsConversao({ funil, receita, sla }) {
     return insights;
   }
 
-  if (funil.taxa_conversao > 30) {
-    insights.push("Taxa de conversao acima de 30% (excelente desempenho).");
-  } else if (funil.taxa_conversao >= 15) {
-    insights.push("Taxa de conversao intermediaria: vale revisar follow-up e proposta.");
+  if (funil.taxa_fechamento === null) {
+    insights.push("Ainda nao ha propostas enviadas suficientes para medir fechamento.");
+  } else if (funil.taxa_fechamento > 30) {
+    insights.push("Taxa de fechamento acima de 30%: excelente eficiencia comercial sobre propostas enviadas.");
+  } else if (funil.taxa_fechamento >= 15) {
+    insights.push("Taxa de fechamento intermediaria: vale revisar follow-up e proposta.");
   } else {
-    insights.push("Taxa de conversao baixa: existe oportunidade de melhorar abordagem e velocidade de resposta.");
+    insights.push("Taxa de fechamento baixa: existe oportunidade de qualificar abordagem e negociacao.");
   }
 
   if (funil.taxa_rejeicao >= 35) {
     insights.push("Taxa de rejeicao alta: investigue motivos de perda e ajuste oferta/comunicacao.");
   }
 
-  if (sla.tempo_medio_resposta_horas > 24) {
-    insights.push("Tempo medio de resposta alto pode estar impactando conversoes.");
-  } else if (sla.tempo_medio_resposta_horas > 0 && sla.tempo_medio_resposta_horas <= 6) {
-    insights.push("Resposta comercial rapida: bom sinal para conversao de leads.");
+  if (atendimento.tempo_medio_atendimento_horas === null) {
+    insights.push("Ainda nao ha base valida para medir tempo medio de atendimento.");
+  } else if (atendimento.tempo_medio_atendimento_horas > 24) {
+    insights.push("Tempo medio de atendimento alto pode estar impactando conversoes.");
+  } else if (atendimento.tempo_medio_atendimento_horas <= 6) {
+    insights.push("Atendimento comercial rapido: bom sinal para conversao de leads.");
   }
 
-  if (sla.total_leads_sem_resposta > 0) {
-    insights.push(`${sla.total_leads_sem_resposta} lead(s) ainda sem resposta registrada.`);
+  if (funil.leads_nao_atendidos > 0) {
+    insights.push(`${funil.leads_nao_atendidos} lead(s) ainda em pre-reserva aguardando atendimento.`);
   }
 
   if (receita.receita_perdida > receita.receita_fechada && receita.receita_perdida > 0) {
@@ -701,6 +728,9 @@ async function calcularDadosConversao(mes, ano) {
     if (status === "LIXEIRA") return;
 
     const dataEnvio = dataEnvioOrcamentoPedido(pedido);
+    const dataReserva = dataReservaPedido(pedido);
+    const dataConfirmacao = dataConfirmacaoPedido(pedido);
+    const dataReprovacao = dataReprovacaoPedido(pedido);
     const valor = numeroFinanceiro(pedido.valor_orcamento ?? pedido.valor ?? pedido.valor_final_contrato);
     const cidade = safeText(pedido.cidade || "", "");
     const uf = safeText(pedido.uf || "", "");
@@ -724,6 +754,9 @@ async function calcularDadosConversao(mes, ano) {
       convidados: safeText(pedido.convidados || pedido.numeroConvidados || pedido.qtdConvidados || pedido.quantidade_convidados || "", ""),
       data_insercao_lead: dataLead,
       data_envio_orcamento: dataEnvio,
+      data_reserva: dataReserva,
+      data_confirmacao: dataConfirmacao,
+      data_reprovacao: dataReprovacao,
       status_evento: status,
       disponibilidade,
       valor_orcamento: valor,
@@ -749,9 +782,13 @@ async function calcularDadosConversao(mes, ano) {
     convidados: item.convidados,
     data_insercao_lead: dataIsoOuVazio(item.data_insercao_lead),
     data_envio_orcamento: dataIsoOuVazio(item.data_envio_orcamento),
+    data_reserva: dataIsoOuVazio(item.data_reserva),
+    data_confirmacao: dataIsoOuVazio(item.data_confirmacao),
+    data_reprovacao: dataIsoOuVazio(item.data_reprovacao),
     status_evento: item.status_evento,
     disponibilidade: item.disponibilidade,
     valor: arredondarNumero(item.valor_orcamento),
+    tempo_atendimento_horas: item.tempo_atendimento_horas ?? null,
     motivo_reprovacao: item.motivo_reprovacao,
     motivo_reprovacao_observacao: item.motivo_reprovacao_observacao,
   });
@@ -766,40 +803,59 @@ async function calcularDadosConversao(mes, ano) {
   const totalReservas = registros.filter((item) => item.status_evento === "RESERVA").length;
   const totalConfirmados = registros.filter((item) => item.status_evento === "CONFIRMADO").length;
   const totalReprovados = registros.filter((item) => item.status_evento === "REPROVADO").length;
-  const reservasEConfirmados = totalReservas + totalConfirmados;
+  const leadsAtendidos = registros.filter((item) => item.status_evento !== "PRE_RESERVA").length;
+  const leadsNaoAtendidos = registros.filter((item) => item.status_evento === "PRE_RESERVA").length;
 
   const receitaFechada = registros
     .filter((item) => item.status_evento === "CONFIRMADO")
     .reduce((acc, item) => acc + item.valor_orcamento, 0);
   const receitaPendente = registros
-    .filter((item) => ["PRE_RESERVA", "RESERVA"].includes(item.status_evento))
+    .filter((item) => item.status_evento === "RESERVA")
     .reduce((acc, item) => acc + item.valor_orcamento, 0);
   const receitaPerdida = registros
     .filter((item) => item.status_evento === "REPROVADO")
     .reduce((acc, item) => acc + item.valor_orcamento, 0);
 
-  const temposResposta = registros
+  registros.forEach((item) => {
+    const inicio = timestampMillis(item.data_insercao_lead);
+    const reserva = timestampMillis(item.data_reserva);
+    item.tempo_atendimento_horas = item.status_evento !== "PRE_RESERVA" && inicio && reserva && reserva >= inicio
+      ? arredondarNumero((reserva - inicio) / (1000 * 60 * 60))
+      : null;
+  });
+
+  const temposAtendimento = registros
     .map((item) => {
+      if (item.status_evento === "PRE_RESERVA") return null;
       const inicio = timestampMillis(item.data_insercao_lead);
-      const envio = timestampMillis(item.data_envio_orcamento);
-      if (!inicio || !envio || envio < inicio) return null;
-      return (envio - inicio) / (1000 * 60 * 60);
+      const reserva = timestampMillis(item.data_reserva);
+      if (!inicio || !reserva || reserva < inicio) return null;
+      return (reserva - inicio) / (1000 * 60 * 60);
     })
     .filter((value) => Number.isFinite(value));
 
-  const tempoMedioResposta = temposResposta.length
-    ? temposResposta.reduce((acc, value) => acc + value, 0) / temposResposta.length
-    : 0;
+  const tempoMedioAtendimento = temposAtendimento.length
+    ? arredondarNumero(temposAtendimento.reduce((acc, value) => acc + value, 0) / temposAtendimento.length)
+    : null;
+  const taxaFechamento = leadsAtendidos ? arredondarNumero((totalConfirmados / leadsAtendidos) * 100) : null;
+  const taxaAtendimento = totalLeads ? arredondarNumero((leadsAtendidos / totalLeads) * 100) : null;
 
   const funil = {
     total_leads: totalLeads,
+    leads_atendidos: leadsAtendidos,
+    leads_nao_atendidos: leadsNaoAtendidos,
+    confirmados: totalConfirmados,
+    reprovados: totalReprovados,
+    em_negociacao: totalReservas,
     total_reservas: totalReservas,
     total_confirmados: totalConfirmados,
     total_reprovados: totalReprovados,
-    taxa_conversao: totalLeads ? arredondarNumero((totalConfirmados / totalLeads) * 100) : 0,
+    taxa_fechamento: taxaFechamento,
+    taxa_atendimento: taxaAtendimento,
+    taxa_conversao: taxaFechamento,
     taxa_rejeicao: totalLeads ? arredondarNumero((totalReprovados / totalLeads) * 100) : 0,
-    taxa_lead_para_reserva: totalLeads ? arredondarNumero((reservasEConfirmados / totalLeads) * 100) : 0,
-    taxa_reserva_para_confirmado: reservasEConfirmados ? arredondarNumero((totalConfirmados / reservasEConfirmados) * 100) : 0,
+    taxa_lead_para_reserva: taxaAtendimento,
+    taxa_reserva_para_confirmado: taxaFechamento,
   };
 
   const receita = {
@@ -808,9 +864,17 @@ async function calcularDadosConversao(mes, ano) {
     receita_perdida: arredondarNumero(receitaPerdida),
   };
 
+  const atendimento = {
+    tempo_medio_atendimento_horas: tempoMedioAtendimento,
+    total_leads_sem_resposta: leadsNaoAtendidos,
+    total_com_base_tempo: temposAtendimento.length,
+  };
+
   const sla = {
-    tempo_medio_resposta_horas: arredondarNumero(tempoMedioResposta),
-    total_leads_sem_resposta: registros.filter((item) => !timestampMillis(item.data_envio_orcamento)).length,
+    tempo_medio_resposta_horas: tempoMedioAtendimento,
+    tempo_medio_atendimento_horas: tempoMedioAtendimento,
+    total_leads_sem_resposta: leadsNaoAtendidos,
+    total_com_base_tempo: temposAtendimento.length,
   };
 
   const perdasTop5 = registros
@@ -827,13 +891,33 @@ async function calcularDadosConversao(mes, ano) {
       .slice()
       .sort(ordenarPorDataEvento)
       .map(resumoDetalhadoConversao),
+    atendidos: registros
+      .filter((item) => item.status_evento !== "PRE_RESERVA")
+      .sort(ordenarPorDataEvento)
+      .map(resumoDetalhadoConversao),
+    nao_atendidos: registros
+      .filter((item) => item.status_evento === "PRE_RESERVA")
+      .sort(ordenarPorDataEvento)
+      .map(resumoDetalhadoConversao),
+    em_negociacao: registros
+      .filter((item) => item.status_evento === "RESERVA")
+      .sort(ordenarPorDataEvento)
+      .map(resumoDetalhadoConversao),
     confirmados: registros
       .filter((item) => item.status_evento === "CONFIRMADO")
       .sort(ordenarPorDataEvento)
       .map(resumoDetalhadoConversao),
+    reprovados: registros
+      .filter((item) => item.status_evento === "REPROVADO")
+      .sort((a, b) => b.valor_orcamento - a.valor_orcamento)
+      .map(resumoDetalhadoConversao),
     leads_sem_resposta: registros
-      .filter((item) => !timestampMillis(item.data_envio_orcamento))
+      .filter((item) => item.status_evento === "PRE_RESERVA")
       .sort(ordenarPorDataEvento)
+      .map(resumoDetalhadoConversao),
+    atendidos_com_tempo: registros
+      .filter((item) => item.status_evento !== "PRE_RESERVA" && item.tempo_atendimento_horas !== null)
+      .sort((a, b) => a.tempo_atendimento_horas - b.tempo_atendimento_horas)
       .map(resumoDetalhadoConversao),
   };
 
@@ -843,10 +927,11 @@ async function calcularDadosConversao(mes, ano) {
     ano: anoNum,
     funil,
     receita,
+    atendimento,
     sla,
     perdas_top5: perdasTop5,
     detalhes,
-    insights: gerarInsightsConversao({ funil, receita, sla }),
+    insights: gerarInsightsConversao({ funil, receita, atendimento }),
   };
 }
 
@@ -1085,6 +1170,28 @@ async function sincronizarPedidoComAgenda(pedidoId, origem = "manual") {
 
 function camposAgendaMudaram(before = {}, after = {}) {
   return CAMPOS_RELEVANTES_AGENDA.some((campo) => JSON.stringify(before[campo] ?? null) !== JSON.stringify(after[campo] ?? null));
+}
+
+function patchDatasEstagio(before = {}, after = {}) {
+  const statusAnterior = normalizarStatusConversao(before.status);
+  const statusAtual = normalizarStatusConversao(after.status);
+  const patch = {};
+
+  if (statusAtual === statusAnterior) return patch;
+  if (statusAtual === "RESERVA" && !after.data_reserva && !after.dataReserva) {
+    patch.data_reserva = admin.firestore.FieldValue.serverTimestamp();
+  }
+  if (statusAtual === "RESERVA" && !after.data_envio_orcamento && !after.dataEnvioOrcamento) {
+    patch.data_envio_orcamento = admin.firestore.FieldValue.serverTimestamp();
+  }
+  if (statusAtual === "CONFIRMADO" && !after.data_confirmacao && !after.dataConfirmacao) {
+    patch.data_confirmacao = admin.firestore.FieldValue.serverTimestamp();
+  }
+  if (statusAtual === "REPROVADO" && !after.data_reprovacao && !after.dataReprovacao) {
+    patch.data_reprovacao = admin.firestore.FieldValue.serverTimestamp();
+  }
+
+  return patch;
 }
 
 function inicioEventoGoogle(evento) {
@@ -1712,6 +1819,11 @@ exports.sincronizarAgendaPedido = onDocumentWritten({
 
     const after = afterSnap.data();
     const before = beforeSnap?.exists ? beforeSnap.data() : null;
+
+    const patchEstagio = patchDatasEstagio(before || {}, after);
+    if (Object.keys(patchEstagio).length) {
+      await afterSnap.ref.set(patchEstagio, { merge: true });
+    }
 
     if (before && !camposAgendaMudaram(before, after)) return;
     await sincronizarPedidoComAgenda(pedidoId, "gatilho_firestore");
