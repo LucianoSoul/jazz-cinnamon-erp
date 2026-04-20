@@ -1351,9 +1351,7 @@
                 await updateDoc(doc(db, "pedidos", ev.id), { local: novoLocal });
                 ev.local = novoLocal; 
                 
-                await window.sincronizarPedidoAgenda(ev.id);
-                
-                Swal.fire({icon: 'success', title: 'Local Salvo!', text: 'Atualizado no sistema e no Google Agenda.', timer: 2000, showConfirmButton: false, background: '#1a1d24'});
+                Swal.fire({icon: 'success', title: 'Local Salvo!', text: 'Agenda sincronizada automaticamente.', timer: 2000, showConfirmButton: false, background: '#1a1d24'});
                 
                 // Silently refresh dashboard background data
                 window.processarFiltrosDashboard(); 
@@ -1651,7 +1649,6 @@
                 // 1. Atualiza instantaneamente no Firebase (UI reage na hora)
                 await updateDoc(doc(db, "pedidos", id), {status: s}); 
                 
-                await window.sincronizarPedidoAgenda(id);
             } catch(e) { 
                 console.error(e); 
             } 
@@ -1666,8 +1663,6 @@
                 try {
                     // 1. Atualiza no Firebase
                     await updateDoc(doc(db, "pedidos", id), {status:'REPROVADO'}); 
-                    
-                    await window.sincronizarPedidoAgenda(id);
                     
                     Swal.fire({icon: 'success', title: 'Excluído!', timer: 1500, showConfirmButton: false, background: '#1a1d24'});
                 } catch(e) {
@@ -1715,17 +1710,6 @@
                 
                 await updateDoc(doc(db, "pedidos", id), payload); 
                 
-                // SINCRONIZAÇÃO EM TEMPO REAL COM A AGENDA
-                try {
-                    const resUpdate = await window.sincronizarPedidoAgenda(id);
-                    if(resUpdate.agendaId && document.getElementById('uni-agenda-id')) {
-                        document.getElementById('uni-agenda-id').value = resUpdate.agendaId;
-                    }
-                } catch (e) {
-                    console.error('Erro na Agenda', e);
-                    throw e;
-                }
-
                 if (modoPdf) {
                     const evAtual = window.dadosGlobais.find(e => e.id === id);
                     const pdfPayload = { acao: "GERAR_PDF_ORCAMENTO", ...evAtual, ...payload, enviarEmail: (modoPdf === true) };
@@ -1748,7 +1732,7 @@
                     } else throw new Error(pdfReq.error);
                 } else {
                     window.fecharModalUnificado(); 
-                    Swal.fire({icon:'success', title:'Agenda e Sistema Sincronizados!', timer:1500, showConfirmButton:false, background:'#1a1d24'});
+                    Swal.fire({icon:'success', title:'Sistema salvo!', text:'Agenda sincronizada automaticamente.', timer:1800, showConfirmButton:false, background:'#1a1d24'});
                 }
             } catch(e) { 
                 console.error(e); 

@@ -31,8 +31,6 @@ const NOMES_CRIADORES_AGENDA = {
 };
 
 const CAMPOS_RELEVANTES_AGENDA = [
-  "agendaId",
-  "agendaIcalUid",
   "cliente",
   "nome_contratante_formal",
   "tipo",

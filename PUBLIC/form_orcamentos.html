@@ -443,12 +443,6 @@
                 // Envia para o Firebase
                 const docRef = await addDoc(collection(db, "pedidos"), dados);
                 
-                fetch(AGENDA_API, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ acao: "SINCRONIZAR_PEDIDO_PUBLICO", pedidoId: docRef.id })
-                }).catch(e => console.error("Erro ao sincronizar Agenda:", e));
-                
                 document.getElementById('formCliente').classList.add('hidden'); document.getElementById('sucesso-cliente').classList.remove('hidden');
             } catch (err) { Swal.fire("Erro", "Falha ao enviar a solicitação.", "error"); } 
             finally { document.getElementById('btn-spinner').classList.add('hidden'); }
