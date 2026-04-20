@@ -215,21 +215,21 @@
             <div id="conversao-loading" class="hidden text-center py-10"><div class="loader"></div></div>
             <div id="conversao-content" class="space-y-5">
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div class="rounded-lg p-4 border" style="background:#1e1e1e; border-color:#2a2a2a;">
-                        <p class="text-[9px] text-gray-500 uppercase font-black tracking-widest mb-2" style="font-family:'Montserrat', sans-serif;">Taxa de Conversão</p>
+                    <button type="button" onclick="window.abrirModalKpiConversao('funil')" class="text-left rounded-lg p-4 border transition hover:border-[#c5a059]/70 focus:outline-none focus:ring-2 focus:ring-[#c5a059]/40" style="background:#1e1e1e; border-color:#2a2a2a;">
+                        <p class="text-[9px] text-gray-500 uppercase font-black tracking-widest mb-2 flex items-center justify-between gap-2" style="font-family:'Montserrat', sans-serif;">Taxa de Conversão <i data-lucide="mouse-pointer-click" class="w-3 h-3"></i></p>
                         <div id="conv-taxa" class="text-3xl font-black">0%</div>
                         <p id="conv-funil-resumo" class="text-[10px] text-gray-500 mt-1">0 confirmados de 0 leads</p>
-                    </div>
-                    <div class="rounded-lg p-4 border" style="background:#1e1e1e; border-color:#2a2a2a;">
-                        <p class="text-[9px] text-gray-500 uppercase font-black tracking-widest mb-2" style="font-family:'Montserrat', sans-serif;">Receita Perdida</p>
+                    </button>
+                    <button type="button" onclick="window.abrirModalKpiConversao('perdas')" class="text-left rounded-lg p-4 border transition hover:border-[#ef4444]/70 focus:outline-none focus:ring-2 focus:ring-[#ef4444]/30" style="background:#1e1e1e; border-color:#2a2a2a;">
+                        <p class="text-[9px] text-gray-500 uppercase font-black tracking-widest mb-2 flex items-center justify-between gap-2" style="font-family:'Montserrat', sans-serif;">Receita Perdida <i data-lucide="mouse-pointer-click" class="w-3 h-3"></i></p>
                         <div id="conv-perdida" class="text-2xl font-black" style="color:#ef4444;">R$ 0,00</div>
                         <p id="conv-rejeicao" class="text-[10px] text-gray-500 mt-1">0% de rejeição</p>
-                    </div>
-                    <div class="rounded-lg p-4 border" style="background:#1e1e1e; border-color:#2a2a2a;">
-                        <p class="text-[9px] text-gray-500 uppercase font-black tracking-widest mb-2" style="font-family:'Montserrat', sans-serif;">Tempo Médio Resposta</p>
+                    </button>
+                    <button type="button" onclick="window.abrirModalKpiConversao('sla')" class="text-left rounded-lg p-4 border transition hover:border-[#c5a059]/70 focus:outline-none focus:ring-2 focus:ring-[#c5a059]/40" style="background:#1e1e1e; border-color:#2a2a2a;">
+                        <p class="text-[9px] text-gray-500 uppercase font-black tracking-widest mb-2 flex items-center justify-between gap-2" style="font-family:'Montserrat', sans-serif;">Tempo Médio Resposta <i data-lucide="mouse-pointer-click" class="w-3 h-3"></i></p>
                         <div id="conv-sla" class="text-2xl font-black text-white">0h</div>
                         <p id="conv-sem-resposta" class="text-[10px] text-gray-500 mt-1">0 leads sem resposta</p>
-                    </div>
+                    </button>
                 </div>
 
                 <div class="rounded-lg p-4 border" style="background:#1e1e1e; border-color:#2a2a2a;">
@@ -636,6 +636,234 @@
             return `https://jazz-cinnamon-erp.web.app/${pagina}?t=${token}`;
         };
 
+        window.formatarDataEventoConversao = (dataStr) => {
+            if(!dataStr) return '--/--/----';
+            const raw = String(dataStr);
+            if(raw.includes('T')) {
+                const dt = new Date(raw);
+                if(!Number.isNaN(dt.getTime())) return dt.toLocaleDateString('pt-BR');
+            }
+            const formatada = window.formatarDataExibicao(raw);
+            return formatada !== '--/--/----' ? formatada : raw;
+        };
+
+        window.formatarDataHoraConversao = (dataStr) => {
+            if(!dataStr) return 'Sem registro';
+            const dt = new Date(dataStr);
+            if(Number.isNaN(dt.getTime())) return window.formatarDataEventoConversao(dataStr);
+            return dt.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+        };
+
+        window.localConversao = (item) => {
+            const cidadeUf = [item.cidade, item.uf].filter(Boolean).join(' - ');
+            return cidadeUf || item.local || 'Local nao informado';
+        };
+
+        window.disponibilidadeConversao = (item) => item.disponibilidade || item.statusAgenda || item.status_evento || 'PENDENTE';
+
+        window.whatsappHrefConversao = (item, tipo = 'lead') => {
+            const rawPhone = String(item.whatsapp || '').replace(/\D/g, '');
+            if(!rawPhone) return '';
+            const phone = rawPhone.startsWith('55') ? rawPhone : `55${rawPhone}`;
+            const dataEvento = window.formatarDataEventoConversao(item.data_evento);
+            const valor = window.fmtMoeda_n(item.valor || 0);
+            const msg = tipo === 'perda'
+                ? window.mensagemRemarketingConversao(item)
+                : `Ola, ${item.cliente || 'tudo bem'}! Tudo bem?\n\nSou o Luciano da Jazz Cinnamon. Recebi sua solicitacao de orcamento para o evento de ${dataEvento}.\n\nPosso te chamar por aqui para alinhar os detalhes e te enviar a proposta?`;
+            return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+        };
+
+        window.renderBotaoWhatsappConversao = (item, tipo = 'lead') => {
+            const href = window.whatsappHrefConversao(item, tipo);
+            const disabled = href ? '' : 'pointer-events-none opacity-40';
+            return `
+                <a href="${href || '#'}" target="_blank" rel="noopener" class="${disabled} w-9 h-9 rounded-lg border border-green-900/60 text-green-400 bg-green-900/20 flex items-center justify-center shrink-0" title="WhatsApp">
+                    <i data-lucide="message-circle" class="w-4 h-4"></i>
+                </a>
+            `;
+        };
+
+        window.renderBotaoExcluirConversao = (item, origemModal) => `
+            <button type="button" onclick="window.excluirPedidoPermanentementeConversao('${window.escapeStr(item.id)}', '${origemModal}')" class="w-9 h-9 rounded-lg border border-red-900/60 text-red-400 bg-red-900/20 flex items-center justify-center shrink-0" title="Excluir permanentemente">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        `;
+
+        window.linhaDetalheConversao = (label, valor) => `
+            <div class="rounded border border-[#2a2a2a] bg-[#121212] px-3 py-2">
+                <div class="text-[8px] uppercase font-black tracking-widest text-gray-500">${label}</div>
+                <div class="text-[11px] text-gray-200 font-bold break-words">${window.escapeHtml(valor || 'N/I')}</div>
+            </div>
+        `;
+
+        window.renderDadosSolicitacaoConversao = (item) => `
+            <div class="grid grid-cols-2 gap-2 mt-3">
+                ${window.linhaDetalheConversao('Data', window.formatarDataEventoConversao(item.data_evento))}
+                ${window.linhaDetalheConversao('Cidade - UF', window.localConversao(item))}
+                ${window.linhaDetalheConversao('Convidados', item.convidados || 'N/I')}
+                ${window.linhaDetalheConversao('Disponibilidade', window.disponibilidadeConversao(item))}
+            </div>
+        `;
+
+        window.itemConversaoPorId = (id) => {
+            const detalhes = window.dadosConversaoAtual?.detalhes || {};
+            return [...(detalhes.leads || []), ...(detalhes.confirmados || []), ...(detalhes.leads_sem_resposta || []), ...(window.dadosConversaoAtual?.perdas_top5 || [])]
+                .find(item => item.id === id);
+        };
+
+        window.recarregarConversoesSilencioso = async () => {
+            const mes = document.getElementById('selMesConversao')?.value || (new Date().getMonth() + 1);
+            const ano = document.getElementById('selAnoConversao')?.value || new Date().getFullYear();
+            const dados = await window.chamarConversaoApi(mes, ano);
+            window.dadosConversaoAtual = dados;
+            window.renderizarConversoes(dados);
+            window.atualizarBadgeConversaoComDados(dados);
+            return dados;
+        };
+
+        window.excluirPedidoPermanentementeConversao = async (id) => {
+            const item = window.itemConversaoPorId(id);
+            const nome = item?.cliente || 'este evento';
+            const r = await Swal.fire({
+                title: 'Excluir permanentemente?',
+                text: `Esta acao remove ${nome} do ERP e tambem remove o evento vinculado da Agenda, se existir.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Excluir permanentemente',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#ef4444',
+                background:'#1a1d24',
+                color:'#fff'
+            });
+            if(!r.isConfirmed) return;
+
+            Swal.fire({title:'Excluindo...', didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff', allowOutsideClick:false});
+            try {
+                await deleteDoc(doc(db, "pedidos", id));
+                await window.recarregarConversoesSilencioso();
+                Swal.fire({icon:'success', title:'Excluido!', timer:1400, showConfirmButton:false, background:'#1a1d24', color:'#fff'});
+            } catch(e) {
+                console.error(e);
+                Swal.fire('Erro', 'Nao foi possivel excluir permanentemente.', 'error');
+            }
+        };
+
+        window.renderLeadFunilConversao = (item, origemModal) => `
+            <div class="rounded-lg p-3 border flex items-center justify-between gap-3" style="background:#121212; border-color:#2a2a2a;">
+                <div class="min-w-0">
+                    <div class="text-xs font-black text-white uppercase truncate">${window.escapeHtml(item.cliente || 'Cliente')}</div>
+                    <div class="text-[10px] text-gray-500 mt-1">${window.formatarDataEventoConversao(item.data_evento)}</div>
+                </div>
+                <div class="flex gap-2 shrink-0">
+                    ${window.renderBotaoWhatsappConversao(item)}
+                    ${window.renderBotaoExcluirConversao(item, origemModal)}
+                </div>
+            </div>
+        `;
+
+        window.renderConfirmadoFunilConversao = (item) => `
+            <div class="rounded-lg p-3 border flex items-center justify-between gap-3" style="background:#121212; border-color:#2a2a2a;">
+                <div class="min-w-0">
+                    <div class="text-xs font-black text-white uppercase truncate">${window.escapeHtml(item.cliente || 'Cliente')}</div>
+                    <div class="text-[10px] text-gray-500 mt-1">${window.formatarDataEventoConversao(item.data_evento)}</div>
+                </div>
+                <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400 shrink-0"></i>
+            </div>
+        `;
+
+        window.renderLeadSemRespostaConversao = (item) => `
+            <div class="rounded-lg p-3 border" style="background:#121212; border-color:#2a2a2a;">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="text-sm font-black text-white uppercase truncate">${window.escapeHtml(item.cliente || 'Cliente')}</div>
+                        <div class="text-[10px] text-gray-500 mt-1">${window.escapeHtml(item.tipo_evento || 'EVENTO')} • ${window.fmtMoeda_n(item.valor || 0)}</div>
+                    </div>
+                    <div class="flex gap-2 shrink-0">
+                        ${window.renderBotaoWhatsappConversao(item)}
+                        ${window.renderBotaoExcluirConversao(item, 'sla')}
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2 mt-3">
+                    ${window.linhaDetalheConversao('Evento', window.formatarDataEventoConversao(item.data_evento))}
+                    ${window.linhaDetalheConversao('Recebido', window.formatarDataHoraConversao(item.data_insercao_lead))}
+                    ${window.linhaDetalheConversao('Cidade - UF', window.localConversao(item))}
+                    ${window.linhaDetalheConversao('Convidados', item.convidados || 'N/I')}
+                    ${window.linhaDetalheConversao('Disponibilidade', window.disponibilidadeConversao(item))}
+                    ${window.linhaDetalheConversao('WhatsApp', item.whatsapp || 'N/I')}
+                </div>
+            </div>
+        `;
+
+        window.renderCardPerdaConversao = (item) => {
+            const nome = window.escapeHtml(item.cliente || 'Cliente');
+            const valor = window.fmtMoeda_n(item.valor || 0);
+            const motivo = item.motivo_reprovacao ? `<div class="text-[9px] text-gray-500 uppercase mt-2">Motivo: ${window.escapeHtml(item.motivo_reprovacao)}</div>` : '';
+
+            return `
+                <div class="rounded-lg p-3 border" style="background:#121212; border-color:#2a2a2a;">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="text-sm font-black text-white uppercase truncate" style="font-family:'Montserrat', sans-serif;">${nome}</div>
+                            <div class="text-[10px] text-red-300 font-black mt-1">${valor}</div>
+                        </div>
+                        ${window.renderBotaoWhatsappConversao(item, 'perda')}
+                    </div>
+                    ${window.renderDadosSolicitacaoConversao(item)}
+                    ${motivo}
+                </div>
+            `;
+        };
+
+        window.abrirModalKpiConversao = (tipo) => {
+            const dados = window.dadosConversaoAtual;
+            if(!dados) {
+                Swal.fire('Aviso', 'Carregue o relatorio antes de abrir os detalhes.', 'info');
+                return;
+            }
+
+            const detalhes = dados.detalhes || {};
+            let titulo = 'Detalhes';
+            let html = '';
+
+            if(tipo === 'funil') {
+                const leads = detalhes.leads || [];
+                const confirmados = detalhes.confirmados || [];
+                titulo = 'Taxa de Conversao';
+                html = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+                        <div>
+                            <div class="text-[10px] uppercase font-black tracking-widest text-[#c5a059] mb-3">Leads (${leads.length})</div>
+                            <div class="space-y-2 max-h-[60vh] overflow-y-auto pr-1">${leads.length ? leads.map(item => window.renderLeadFunilConversao(item, 'funil')).join('') : '<div class="text-xs text-gray-500 border border-dashed border-[#2a2a2a] rounded-lg p-6 text-center">Nenhum lead no periodo.</div>'}</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] uppercase font-black tracking-widest text-emerald-400 mb-3">Confirmados (${confirmados.length})</div>
+                            <div class="space-y-2 max-h-[60vh] overflow-y-auto pr-1">${confirmados.length ? confirmados.map(window.renderConfirmadoFunilConversao).join('') : '<div class="text-xs text-gray-500 border border-dashed border-[#2a2a2a] rounded-lg p-6 text-center">Nenhum confirmado no periodo.</div>'}</div>
+                        </div>
+                    </div>
+                `;
+            } else if(tipo === 'sla') {
+                const semResposta = detalhes.leads_sem_resposta || [];
+                titulo = 'Leads sem resposta';
+                html = `<div class="space-y-3 text-left max-h-[70vh] overflow-y-auto pr-1">${semResposta.length ? semResposta.map(window.renderLeadSemRespostaConversao).join('') : '<div class="text-xs text-gray-500 border border-dashed border-[#2a2a2a] rounded-lg p-8 text-center">Nenhum lead sem resposta neste periodo.</div>'}</div>`;
+            } else {
+                const perdas = dados.perdas_top5 || [];
+                titulo = 'Top 5 Perdas';
+                html = `<div class="space-y-3 text-left max-h-[70vh] overflow-y-auto pr-1">${perdas.length ? perdas.map(item => window.renderCardPerdaConversao(item)).join('') : '<div class="text-xs text-gray-500 border border-dashed border-[#2a2a2a] rounded-lg p-8 text-center">Nenhuma perda neste periodo.</div>'}</div>`;
+            }
+
+            Swal.fire({
+                title: `<span style="font-family:Montserrat,sans-serif; color:#c5a059; font-size:14px; text-transform:uppercase; letter-spacing:.12em;">${titulo}</span>`,
+                html,
+                background:'#1a1d24',
+                color:'#fff',
+                showConfirmButton:false,
+                showCloseButton:true,
+                width: tipo === 'funil' ? '980px' : '680px',
+                customClass: { popup: 'border border-[#2a2e39] rounded-xl shadow-2xl' },
+                didOpen: () => { if(window.lucide) window.lucide.createIcons(); }
+            });
+        };
+
         window.renderBarraFunilConversao = (label, valor, total, cor) => {
             const pct = total > 0 ? Math.max(2, Math.min((valor / total) * 100, 100)) : 0;
             return `
@@ -674,29 +902,9 @@
             ].join('');
 
             const perdas = Array.isArray(dados.perdas_top5) ? dados.perdas_top5 : [];
-            document.getElementById('conv-perdas').innerHTML = perdas.length ? perdas.map((item) => {
-                const nome = window.escapeHtml(item.cliente || 'Cliente');
-                const valor = window.fmtMoeda_n(item.valor || 0);
-                const dataEvento = window.formatarDataExibicao(item.data_evento) || item.data_evento || '--/--/----';
-                const motivo = item.motivo_reprovacao ? `<span class="text-[9px] text-gray-500 uppercase">Motivo: ${window.escapeHtml(item.motivo_reprovacao)}</span>` : '';
-                const phone = String(item.whatsapp || '').replace(/\D/g, '');
-                const msg = window.mensagemRemarketingConversao(item);
-                const href = phone ? `https://wa.me/55${phone}?text=${encodeURIComponent(msg)}` : '#';
-                const disabled = phone ? '' : 'pointer-events-none opacity-40';
-
-                return `
-                    <div class="rounded-lg p-3 border flex items-center justify-between gap-3" style="background:#121212; border-color:#2a2a2a;">
-                        <div class="min-w-0">
-                            <div class="text-sm font-black text-white uppercase truncate" style="font-family:'Montserrat', sans-serif;">${nome}</div>
-                            <div class="text-[10px] text-gray-500 mt-1">${dataEvento} • <span class="text-red-300 font-black">${valor}</span></div>
-                            ${motivo}
-                        </div>
-                        <a href="${href}" target="_blank" class="${disabled} w-10 h-10 rounded-lg border border-green-900/60 text-green-400 bg-green-900/20 flex items-center justify-center shrink-0" title="Recontatar via WhatsApp">
-                            <i data-lucide="message-circle" class="w-4 h-4"></i>
-                        </a>
-                    </div>
-                `;
-            }).join('') : '<div class="text-center text-xs text-gray-500 py-8 border border-dashed border-[#2a2a2a] rounded-lg">Nenhuma perda neste período.</div>';
+            document.getElementById('conv-perdas').innerHTML = perdas.length
+                ? perdas.map((item) => window.renderCardPerdaConversao(item)).join('')
+                : '<div class="text-center text-xs text-gray-500 py-8 border border-dashed border-[#2a2a2a] rounded-lg">Nenhuma perda neste período.</div>';
 
             const insights = Array.isArray(dados.insights) ? dados.insights : [];
             document.getElementById('conv-insights').innerHTML = insights.length ? insights.map((txt) => `
@@ -2032,11 +2240,17 @@
                         let nomeAnexo = `Orçamento (${countOrc + 1})`;
                         anexos.push({ nome: nomeAnexo, url: pdfReq.pdfUrl, data: new Date().toISOString() });
                         
-                        await updateDoc(doc(db, "pedidos", id), {
+                        const camposPdf = {
                             anexos: anexos,
-                            dataEnvioOrcamento: serverTimestamp(),
-                            data_envio_orcamento: serverTimestamp()
-                        });
+                            dataGeracaoOrcamento: serverTimestamp(),
+                            data_geracao_orcamento: serverTimestamp()
+                        };
+                        if(modoPdf === true) {
+                            camposPdf.dataEnvioOrcamento = serverTimestamp();
+                            camposPdf.data_envio_orcamento = serverTimestamp();
+                            camposPdf.orcamentoEnviadoEm = serverTimestamp();
+                        }
+                        await updateDoc(doc(db, "pedidos", id), camposPdf);
 
                         window.fecharModalUnificado(); 
                         let msgPdf = modoPdf === true ? 'PDF gerado e enviado por e-mail!' : 'PDF gerado e guardado no sistema (não enviado).';

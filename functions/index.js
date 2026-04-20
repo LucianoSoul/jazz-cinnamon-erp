@@ -625,21 +625,17 @@ function dataInsercaoLeadPedido(pedido) {
 }
 
 function dataEnvioOrcamentoPedido(pedido) {
-  const direta = pedido.data_envio_orcamento
+  return pedido.data_envio_orcamento
     || pedido.dataEnvioOrcamento
     || pedido.orcamentoEnviadoEm
-    || pedido.orcamentoGeradoEm
     || null;
-  if (direta) return direta;
+}
 
-  const anexos = Array.isArray(pedido.anexos) ? pedido.anexos : [];
-  const orcamentos = anexos
-    .filter((anexo) => normalizarChaveAgenda(anexo?.nome).startsWith("ORCAMENTO"))
-    .map((anexo) => anexo.data || anexo.criadoEm || anexo.createdAt)
-    .filter((data) => timestampMillis(data))
-    .sort((a, b) => timestampMillis(a) - timestampMillis(b));
-
-  return orcamentos[0] || null;
+function ehLeadComercialConversao(pedido) {
+  const origem = String(pedido.origem || "").toLowerCase();
+  if (["google_calendar", "google_calendar_manual"].includes(origem)) return false;
+  if (pedido.origemCriadorEmail || pedido.origemCriadorNome) return false;
+  return true;
 }
 
 function gerarInsightsConversao({ funil, receita, sla }) {
@@ -695,6 +691,8 @@ async function calcularDadosConversao(mes, ano) {
 
   snapshot.forEach((docSnap) => {
     const pedido = { id: docSnap.id, ...docSnap.data() };
+    if (!ehLeadComercialConversao(pedido)) return;
+
     const dataLead = dataInsercaoLeadPedido(pedido);
     const partes = partesDataLocal(dataLead);
     if (!partes || partes.mes !== mesNum || partes.ano !== anoNum) return;
@@ -704,21 +702,65 @@ async function calcularDadosConversao(mes, ano) {
 
     const dataEnvio = dataEnvioOrcamentoPedido(pedido);
     const valor = numeroFinanceiro(pedido.valor_orcamento ?? pedido.valor ?? pedido.valor_final_contrato);
+    const cidade = safeText(pedido.cidade || "", "");
+    const uf = safeText(pedido.uf || "", "");
+    const local = safeText(pedido.local || pedido.localEvento || pedido.endereco || [cidade, uf].filter(Boolean).join(" - "), "");
+    const disponibilidade = disponibilidadePush(pedido);
 
     registros.push({
       id: pedido.id,
       cliente: safeText(pedido.cliente || pedido.nome_contratante_formal, "Cliente"),
-      whatsapp: String(pedido.whatsapp || ""),
+      whatsapp: String(pedido.whatsapp || pedido.telefone || pedido.celular || ""),
+      email: safeText(pedido.email || pedido.email_contratante || pedido.emailCliente, ""),
+      documento: safeText(pedido.documento || pedido.cpfCnpj || pedido.cpf_cnpj || "", ""),
       tipo_evento: safeText(pedido.tipo_evento || pedido.tipo, "EVENTO"),
       data_evento: pedido.dataStr || pedido.data || "",
+      hora_inicio: safeText(pedido.horaInicio || pedido.hora_inicio || pedido.hora || "", ""),
+      hora_termino: safeText(pedido.horaTermino || pedido.hora_termino || "", ""),
+      duracao: safeText(pedido.duracao || "", ""),
+      cidade,
+      uf,
+      local,
+      convidados: safeText(pedido.convidados || pedido.numeroConvidados || pedido.qtdConvidados || pedido.quantidade_convidados || "", ""),
       data_insercao_lead: dataLead,
       data_envio_orcamento: dataEnvio,
       status_evento: status,
+      disponibilidade,
       valor_orcamento: valor,
       motivo_reprovacao: pedido.motivo_reprovacao || pedido.motivoReprovacao || "",
       motivo_reprovacao_observacao: pedido.motivo_reprovacao_observacao || "",
     });
   });
+
+  const resumoDetalhadoConversao = (item) => ({
+    id: item.id,
+    cliente: item.cliente,
+    whatsapp: item.whatsapp,
+    email: item.email,
+    documento: item.documento,
+    tipo_evento: item.tipo_evento,
+    data_evento: item.data_evento,
+    hora_inicio: item.hora_inicio,
+    hora_termino: item.hora_termino,
+    duracao: item.duracao,
+    cidade: item.cidade,
+    uf: item.uf,
+    local: item.local,
+    convidados: item.convidados,
+    data_insercao_lead: dataIsoOuVazio(item.data_insercao_lead),
+    data_envio_orcamento: dataIsoOuVazio(item.data_envio_orcamento),
+    status_evento: item.status_evento,
+    disponibilidade: item.disponibilidade,
+    valor: arredondarNumero(item.valor_orcamento),
+    motivo_reprovacao: item.motivo_reprovacao,
+    motivo_reprovacao_observacao: item.motivo_reprovacao_observacao,
+  });
+
+  const ordenarPorDataEvento = (a, b) => {
+    const dataA = timestampMillis(a.data_evento) || timestampMillis(a.data_insercao_lead) || 0;
+    const dataB = timestampMillis(b.data_evento) || timestampMillis(b.data_insercao_lead) || 0;
+    return dataA - dataB || String(a.cliente).localeCompare(String(b.cliente), "pt-BR");
+  };
 
   const totalLeads = registros.length;
   const totalReservas = registros.filter((item) => item.status_evento === "RESERVA").length;
@@ -776,15 +818,24 @@ async function calcularDadosConversao(mes, ano) {
     .sort((a, b) => b.valor_orcamento - a.valor_orcamento)
     .slice(0, 5)
     .map((item) => ({
-      cliente: item.cliente,
-      valor: arredondarNumero(item.valor_orcamento),
+      ...resumoDetalhadoConversao(item),
       data: dataIsoOuVazio(item.data_insercao_lead),
-      data_evento: item.data_evento,
-      tipo_evento: item.tipo_evento,
-      whatsapp: item.whatsapp,
-      motivo_reprovacao: item.motivo_reprovacao,
-      motivo_reprovacao_observacao: item.motivo_reprovacao_observacao,
     }));
+
+  const detalhes = {
+    leads: registros
+      .slice()
+      .sort(ordenarPorDataEvento)
+      .map(resumoDetalhadoConversao),
+    confirmados: registros
+      .filter((item) => item.status_evento === "CONFIRMADO")
+      .sort(ordenarPorDataEvento)
+      .map(resumoDetalhadoConversao),
+    leads_sem_resposta: registros
+      .filter((item) => !timestampMillis(item.data_envio_orcamento))
+      .sort(ordenarPorDataEvento)
+      .map(resumoDetalhadoConversao),
+  };
 
   return {
     success: true,
@@ -794,6 +845,7 @@ async function calcularDadosConversao(mes, ano) {
     receita,
     sla,
     perdas_top5: perdasTop5,
+    detalhes,
     insights: gerarInsightsConversao({ funil, receita, sla }),
   };
 }
