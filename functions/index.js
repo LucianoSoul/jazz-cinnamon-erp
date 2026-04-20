@@ -654,6 +654,17 @@ function dataReprovacaoPedido(pedido) {
     || null;
 }
 
+function normalizarFollowupPerda(status, statusEvento = "") {
+  if (statusEvento !== "REPROVADO") return "";
+  const raw = String(status || "PENDENTE")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\s-]+/g, "_")
+    .toUpperCase();
+  const validos = ["PENDENTE", "TRATADA", "REATIVAR_DEPOIS", "REATIVADA", "SEM_INTERESSE_FINAL"];
+  return validos.includes(raw) ? raw : "PENDENTE";
+}
+
 function ehLeadComercialConversao(pedido) {
   const origem = String(pedido.origem || "").toLowerCase();
   if (["google_calendar", "google_calendar_manual"].includes(origem)) return false;
@@ -736,6 +747,10 @@ async function calcularDadosConversao(mes, ano) {
     const uf = safeText(pedido.uf || "", "");
     const local = safeText(pedido.local || pedido.localEvento || pedido.endereco || [cidade, uf].filter(Boolean).join(" - "), "");
     const disponibilidade = disponibilidadePush(pedido);
+    const statusFollowupPerda = normalizarFollowupPerda(
+      pedido.status_followup_perda || pedido.statusFollowupPerda,
+      status,
+    );
 
     registros.push({
       id: pedido.id,
@@ -759,6 +774,9 @@ async function calcularDadosConversao(mes, ano) {
       data_reprovacao: dataReprovacao,
       status_evento: status,
       disponibilidade,
+      status_followup_perda: statusFollowupPerda,
+      followup_perda_atualizado_em: pedido.followup_perda_atualizado_em || pedido.followupPerdaAtualizadoEm || null,
+      followup_perda_tratado_em: pedido.followup_perda_tratado_em || pedido.followupPerdaTratadoEm || null,
       valor_orcamento: valor,
       motivo_reprovacao: pedido.motivo_reprovacao || pedido.motivoReprovacao || "",
       motivo_reprovacao_observacao: pedido.motivo_reprovacao_observacao || "",
@@ -787,6 +805,9 @@ async function calcularDadosConversao(mes, ano) {
     data_reprovacao: dataIsoOuVazio(item.data_reprovacao),
     status_evento: item.status_evento,
     disponibilidade: item.disponibilidade,
+    status_followup_perda: item.status_followup_perda,
+    followup_perda_atualizado_em: dataIsoOuVazio(item.followup_perda_atualizado_em),
+    followup_perda_tratado_em: dataIsoOuVazio(item.followup_perda_tratado_em),
     valor: arredondarNumero(item.valor_orcamento),
     tempo_atendimento_horas: item.tempo_atendimento_horas ?? null,
     motivo_reprovacao: item.motivo_reprovacao,
@@ -814,6 +835,10 @@ async function calcularDadosConversao(mes, ano) {
     .reduce((acc, item) => acc + item.valor_orcamento, 0);
   const receitaPerdida = registros
     .filter((item) => item.status_evento === "REPROVADO")
+    .reduce((acc, item) => acc + item.valor_orcamento, 0);
+  const perdasPendentes = registros
+    .filter((item) => item.status_evento === "REPROVADO" && item.status_followup_perda === "PENDENTE");
+  const receitaPerdidaPendenteAcao = perdasPendentes
     .reduce((acc, item) => acc + item.valor_orcamento, 0);
 
   registros.forEach((item) => {
@@ -862,6 +887,14 @@ async function calcularDadosConversao(mes, ano) {
     receita_fechada: arredondarNumero(receitaFechada),
     receita_pendente: arredondarNumero(receitaPendente),
     receita_perdida: arredondarNumero(receitaPerdida),
+    receita_perdida_pendente_acao: arredondarNumero(receitaPerdidaPendenteAcao),
+    perdas_pendentes_acao: perdasPendentes.length,
+  };
+
+  const followupPerdas = {
+    total_reprovados: totalReprovados,
+    pendentes: perdasPendentes.length,
+    receita_pendente_acao: arredondarNumero(receitaPerdidaPendenteAcao),
   };
 
   const atendimento = {
@@ -911,6 +944,10 @@ async function calcularDadosConversao(mes, ano) {
       .filter((item) => item.status_evento === "REPROVADO")
       .sort((a, b) => b.valor_orcamento - a.valor_orcamento)
       .map(resumoDetalhadoConversao),
+    perdas_pendentes: perdasPendentes
+      .slice()
+      .sort((a, b) => b.valor_orcamento - a.valor_orcamento)
+      .map(resumoDetalhadoConversao),
     leads_sem_resposta: registros
       .filter((item) => item.status_evento === "PRE_RESERVA")
       .sort(ordenarPorDataEvento)
@@ -927,6 +964,7 @@ async function calcularDadosConversao(mes, ano) {
     ano: anoNum,
     funil,
     receita,
+    followup_perdas: followupPerdas,
     atendimento,
     sla,
     perdas_top5: perdasTop5,
@@ -1189,6 +1227,9 @@ function patchDatasEstagio(before = {}, after = {}) {
   }
   if (statusAtual === "REPROVADO" && !after.data_reprovacao && !after.dataReprovacao) {
     patch.data_reprovacao = admin.firestore.FieldValue.serverTimestamp();
+  }
+  if (statusAtual === "REPROVADO" && !after.status_followup_perda && !after.statusFollowupPerda) {
+    patch.status_followup_perda = "PENDENTE";
   }
 
   return patch;

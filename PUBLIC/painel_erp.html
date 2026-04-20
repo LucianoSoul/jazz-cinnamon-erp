@@ -131,7 +131,7 @@
         </div>
     </header>
 
-    <div id="badge-conversao-alerta" onclick="window.alternarView('conversoes')" class="hidden cursor-pointer mx-auto max-w-3xl px-4 pt-3">
+    <div id="badge-conversao-alerta" onclick="window.abrirPerdasPendentesDoBanner()" class="hidden cursor-pointer mx-auto max-w-3xl px-4 pt-3">
         <div class="bg-red-900/20 border border-red-900/60 text-red-300 rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-wider flex items-center justify-between gap-3">
             <span id="badge-conversao-texto">ALERTA: R$ 0 em oportunidades perdidas este mês</span>
             <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
@@ -677,6 +677,16 @@
 
         window.disponibilidadeConversao = (item) => item.disponibilidade || item.statusAgenda || item.status_evento || 'PENDENTE';
 
+        window.labelsFollowupPerda = {
+            PENDENTE: 'Pendente',
+            TRATADA: 'Tratada',
+            REATIVAR_DEPOIS: 'Reativar depois',
+            REATIVADA: 'Reativada',
+            SEM_INTERESSE_FINAL: 'Sem interesse final'
+        };
+
+        window.statusFollowupPerda = (item) => item.status_followup_perda || 'PENDENTE';
+
         window.whatsappHrefConversao = (item, tipo = 'lead') => {
             const rawPhone = String(item.whatsapp || '').replace(/\D/g, '');
             if(!rawPhone) return '';
@@ -704,6 +714,15 @@
                 <i data-lucide="trash-2" class="w-4 h-4"></i>
             </button>
         `;
+
+        window.renderSelectFollowupPerda = (item) => {
+            const atual = window.statusFollowupPerda(item);
+            return `
+                <select onchange="window.atualizarFollowupPerda('${window.escapeStr(item.id)}', this.value)" class="input-erp text-[10px] uppercase font-black w-full mt-3" title="Status do follow-up da perda">
+                    ${Object.entries(window.labelsFollowupPerda).map(([value, label]) => `<option value="${value}" ${value === atual ? 'selected' : ''}>${label}</option>`).join('')}
+                </select>
+            `;
+        };
 
         window.linhaDetalheConversao = (label, valor) => `
             <div class="rounded border border-[#2a2a2a] bg-[#121212] px-3 py-2">
@@ -737,6 +756,28 @@
             window.atualizarBadgeConversaoComDados(dados);
             return dados;
         };
+
+        window.atualizarFollowupPerda = async (id, status) => {
+            if(!id || !status) return;
+            Swal.fire({title:'Atualizando follow-up...', didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff', allowOutsideClick:false});
+            try {
+                const payload = {
+                    status_followup_perda: status,
+                    followup_perda_atualizado_em: serverTimestamp()
+                };
+                if(status === 'TRATADA') payload.followup_perda_tratado_em = serverTimestamp();
+                await updateDoc(doc(db, "pedidos", id), payload);
+                await window.recarregarConversoesSilencioso();
+                const modalAtual = window.modalConversaoAtual || 'perdas';
+                Swal.close();
+                setTimeout(() => window.abrirModalKpiConversao(modalAtual), 80);
+            } catch(e) {
+                console.error(e);
+                Swal.fire('Erro', 'Nao foi possivel atualizar o follow-up da perda.', 'error');
+            }
+        };
+
+        window.marcarPerdaComoTratada = (id) => window.atualizarFollowupPerda(id, 'TRATADA');
 
         window.excluirPedidoPermanentementeConversao = async (id) => {
             const item = window.itemConversaoPorId(id);
@@ -815,6 +856,8 @@
             const nome = window.escapeHtml(item.cliente || 'Cliente');
             const valor = window.fmtMoeda_n(item.valor || 0);
             const motivo = item.motivo_reprovacao ? `<div class="text-[9px] text-gray-500 uppercase mt-2">Motivo: ${window.escapeHtml(item.motivo_reprovacao)}</div>` : '';
+            const followup = window.statusFollowupPerda(item);
+            const tratado = followup !== 'PENDENTE';
 
             return `
                 <div class="rounded-lg p-3 border" style="background:#121212; border-color:#2a2a2a;">
@@ -827,6 +870,16 @@
                     </div>
                     ${window.renderDadosSolicitacaoConversao(item)}
                     ${motivo}
+                    <div class="mt-3 rounded-lg border border-[#2a2a2a] bg-[#1e1e1e] p-2">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-[9px] uppercase font-black tracking-widest text-gray-500">Follow-up da perda</span>
+                            <span class="text-[9px] uppercase font-black ${tratado ? 'text-emerald-400' : 'text-red-300'}">${window.escapeHtml(window.labelsFollowupPerda[followup] || followup)}</span>
+                        </div>
+                        ${window.renderSelectFollowupPerda(item)}
+                        <button type="button" onclick="window.marcarPerdaComoTratada('${window.escapeStr(item.id)}')" class="mt-2 w-full rounded-lg border border-emerald-900/60 bg-emerald-900/20 text-emerald-300 py-2 text-[10px] font-black uppercase tracking-wider ${tratado ? 'opacity-50' : ''}">
+                            Marcar como tratado
+                        </button>
+                    </div>
                 </div>
             `;
         };
@@ -869,6 +922,7 @@
                 return;
             }
 
+            window.modalConversaoAtual = tipo;
             const detalhes = dados.detalhes || {};
             let titulo = 'Detalhes';
             let html = '';
@@ -905,6 +959,10 @@
                         ${window.renderSecaoModalConversao('Atendidos', atendidos, item => window.renderStatusFunilConversao(item, 'text-emerald-400', 'send'), 'Nenhum lead atendido no periodo.')}
                     </div>
                 `;
+            } else if(tipo === 'perdas_pendentes') {
+                const perdas = detalhes.perdas_pendentes || [];
+                titulo = 'Perdas Pendentes de Acao';
+                html = `<div class="space-y-3 text-left max-h-[70vh] overflow-y-auto pr-1">${perdas.length ? perdas.map(item => window.renderCardPerdaConversao(item)).join('') : '<div class="text-xs text-gray-500 border border-dashed border-[#2a2a2a] rounded-lg p-8 text-center">Nenhuma perda pendente de acao neste periodo.</div>'}</div>`;
             } else {
                 const perdas = detalhes.reprovados || dados.perdas_top5 || [];
                 titulo = 'Receita Perdida';
@@ -1007,16 +1065,33 @@
         window.atualizarBadgeConversaoComDados = (dados) => {
             const badge = document.getElementById('badge-conversao-alerta');
             const texto = document.getElementById('badge-conversao-texto');
-            const perdida = window.safeNum(dados?.receita?.receita_perdida || 0);
+            const perdida = window.safeNum(dados?.followup_perdas?.receita_pendente_acao ?? dados?.receita?.receita_perdida_pendente_acao ?? 0);
+            const qtd = window.safeNum(dados?.followup_perdas?.pendentes ?? dados?.receita?.perdas_pendentes_acao ?? 0);
             if(!badge || !texto) return;
+            window.dadosConversaoBadgeAtual = dados;
 
             if(perdida > 0) {
-                texto.innerText = `ALERTA: ${window.fmtMoeda_n(perdida)} em oportunidades perdidas este mês`;
+                texto.innerText = `ALERTA: ${window.fmtMoeda_n(perdida)} em perdas pendentes de ação (${qtd})`;
                 badge.classList.remove('hidden');
             } else {
                 badge.classList.add('hidden');
             }
             if(window.lucide) window.lucide.createIcons();
+        };
+
+        window.abrirPerdasPendentesDoBanner = async () => {
+            window.alternarView('conversoes');
+            const hoje = new Date();
+            const selMes = document.getElementById('selMesConversao');
+            const selAno = document.getElementById('selAnoConversao');
+            if(selMes) selMes.value = hoje.getMonth() + 1;
+            if(selAno) selAno.value = hoje.getFullYear();
+            try {
+                await window.carregarConversoes();
+                window.abrirModalKpiConversao('perdas_pendentes');
+            } catch(e) {
+                console.warn('Nao foi possivel abrir perdas pendentes:', e);
+            }
         };
 
         window.atualizarBadgeConversao = async () => {
@@ -2170,6 +2245,7 @@
                 if(s === 'RESERVA' && !ev.data_envio_orcamento && !ev.dataEnvioOrcamento) payloadStatus.data_envio_orcamento = serverTimestamp();
                 if(s === 'CONFIRMADO' && !ev.data_confirmacao) payloadStatus.data_confirmacao = serverTimestamp();
                 if(s === 'REPROVADO' && !ev.data_reprovacao) payloadStatus.data_reprovacao = serverTimestamp();
+                if(s === 'REPROVADO' && !ev.status_followup_perda) payloadStatus.status_followup_perda = 'PENDENTE';
                 // 1. Atualiza instantaneamente no Firebase (UI reage na hora)
                 await updateDoc(doc(db, "pedidos", id), payloadStatus);
                 
@@ -2252,6 +2328,7 @@
                         motivo_reprovacao: r.value.motivo,
                         motivo_reprovacao_codigo: r.value.codigo,
                         motivo_reprovacao_observacao: r.value.observacao,
+                        status_followup_perda: 'PENDENTE',
                         reprovadoEm: serverTimestamp()
                     };
                     if(!ev?.data_reprovacao) payloadReprovacao.data_reprovacao = serverTimestamp();
