@@ -15,6 +15,7 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -268,6 +269,7 @@
                 <select id="filtroMesFin" onchange="window.carregarFinanceiroGeral()" class="input-erp text-xs flex-1"><option value="todos">TODOS</option><option value="1">JAN</option><option value="2">FEV</option><option value="3">MAR</option><option value="4">ABR</option><option value="5">MAI</option><option value="6">JUN</option><option value="7">JUL</option><option value="8">AGO</option><option value="9">SET</option><option value="10">OUT</option><option value="11">NOV</option><option value="12">DEZ</option></select>
                 <select id="filtroAnoFin" onchange="window.carregarFinanceiroGeral()" class="input-erp text-xs w-24"><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option></select>
                 <button onclick="window.carregarFinanceiroGeral()" class="btn-neutral p-2"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+                <button onclick="window.abrirModalPdfRelatorioFinanceiro()" class="btn-neutral p-2" title="Gerar PDF do Relatorio"><i data-lucide="file-down" class="w-4 h-4"></i></button>
                 <button onclick="window.abrirRelatorioRecebiveis()" class="btn-neutral p-2" title="Relatório de Recebíveis"><i data-lucide="file-text" class="w-4 h-4"></i></button>
             </div>
             <div id="fin-geral-content" class="space-y-6 pb-20"><div class="text-center py-10"><div class="loader"></div></div></div>
@@ -338,6 +340,7 @@
 
             <div class="p-6 space-y-6">
                 <input type="hidden" id="uni-id">
+                <input type="hidden" id="uni-grupo-id">
                 <input type="hidden" id="uni-agenda-id">
                 <input type="hidden" id="uni-tipo">
                 <input type="hidden" id="uni-cliente-hidden">
@@ -369,6 +372,23 @@
                                 <label class="text-[9px] text-gray-500 uppercase mb-1 block">Valor Orçamento</label>
                                 <input type="text" id="uni-valor-input" class="input-erp w-full p-2 text-xs font-bold text-white border-[#d4af37]" oninput="window.formatarMoedaParaInput(this); window.recalcularTotalUnificado()">
                             </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="text-[9px] text-gray-500 uppercase">Atendimento</label>
+                            <select id="uni-atendimento" class="input-erp w-full p-2 text-xs font-bold text-white">
+                                <option value="Luciano">Luciano</option>
+                                <option value="Serginho">Serginho</option>
+                            </select>
+                        </div>
+                        <div id="uni-grupo-wrap" class="hidden bg-[#111318] border border-[#2a2e39] rounded-lg p-4 space-y-3">
+                            <div class="flex items-center justify-between gap-3">
+                                <div>
+                                    <p class="text-[9px] text-gray-500 uppercase font-bold tracking-widest">Apresentacoes do Grupo</p>
+                                    <p class="text-[10px] text-gray-400 mt-1">Financeiro, pagamentos e status continuam vinculados ao primeiro dia.</p>
+                                </div>
+                                <span id="uni-grupo-resumo" class="text-[9px] font-black uppercase tracking-widest text-[#d4af37]"></span>
+                            </div>
+                            <div id="uni-subeventos-lista" class="space-y-3"></div>
                         </div>
                     </div>
 
@@ -417,6 +437,14 @@
                         <div class="flex items-center justify-between bg-[#111318] border border-[#2a2e39] rounded p-3 mb-3">
                             <label class="text-[10px] sm:text-xs font-bold text-gray-300 uppercase">Levará Roadie? (+R$ 100)</label>
                             <input type="checkbox" id="uni-roadie" class="w-4 h-4 accent-[#d4af37] rounded cursor-pointer" onchange="window.recalcularTotalUnificado()">
+                        </div>
+                        <div class="bg-[#111318] border border-[#2a2e39] rounded p-3 mb-3">
+                            <label class="text-[9px] text-gray-500 uppercase block mb-2">Sem Producao (S/N)</label>
+                            <select id="uni-sem-producao" class="input-erp w-full p-2 text-xs font-bold text-white" onchange="window.recalcularTotalUnificado()">
+                                <option value="">Padrao (null)</option>
+                                <option value="S">S</option>
+                                <option value="N">N</option>
+                            </select>
                         </div>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
                             <div><label class="text-[8px] text-gray-500 uppercase">Gas. Luciano</label><input type="number" id="uni-gas-luc" oninput="window.recalcularTotalUnificado()" class="input-erp w-full p-1.5 text-xs text-center" placeholder="0.00" step="0.01"></div>
@@ -488,7 +516,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc, addDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc, addDoc, setDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const URL_BACKEND = "https://script.google.com/macros/s/AKfycbx9NsoG0R-NNtbECB-Qw96YDcZaexKDmbfH90vIiXzwElYALIJBO5NdUC9tCuO4AXUh/exec";
         const firebaseConfig = { apiKey: "AIzaSyBoQvjJ_j_OO6uNbW0ar-rzRiiMR2Xe8m4", authDomain: "jazz-cinnamon-erp.firebaseapp.com", projectId: "jazz-cinnamon-erp", storageBucket: "jazz-cinnamon-erp.firebasestorage.app", messagingSenderId: "359043770756", appId: "1:359043770756:web:a5a4eec50e6e40f0ebd5d1" };
@@ -584,6 +612,118 @@
         };
         window.escapeStr = (s) => s ? String(s).replace(/'/g, "\\'").replace(/"/g, "&quot;") : "";
         window.escapeHtml = (s) => String(s || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+        window.normalizarTextoBusca = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+        window.normalizarAtendimento = (value, fallback = '') => {
+            const raw = window.normalizarTextoBusca(value);
+            if(!raw) return fallback;
+            if(raw.includes('SERG')) return 'Serginho';
+            if(raw.includes('LUCI')) return 'Luciano';
+            return fallback;
+        };
+        window.eventoImportadoAgenda = (ev = {}) => {
+            const origem = String((ev && ev.origem) || '').toLowerCase();
+            return ['google_calendar', 'google_calendar_manual'].includes(origem) || !!((ev && ev.origemCriadorEmail) || (ev && ev.origemCriadorNome));
+        };
+        window.obterAtendimentoEvento = (ev = {}) => {
+            const atendimentoInformado = window.normalizarAtendimento(ev && ev.atendimento, '');
+            if(atendimentoInformado) return atendimentoInformado;
+            const criadorEmail = String((ev && (ev.origemCriadorEmail || ev.criadorEmail)) || '').trim().toLowerCase();
+            if(criadorEmail === 'sergiodobass@gmail.com') return 'Serginho';
+            if(criadorEmail === 'luciano.cinnamon@gmail.com') return 'Luciano';
+            return window.normalizarAtendimento(ev && (ev.origemCriadorNome || ev.criadorNome), 'Luciano');
+        };
+        window.renderTagOrigemEvento = (ev = {}) => {
+            const atendimento = window.escapeHtml(window.obterAtendimentoEvento(ev));
+            if(window.eventoImportadoAgenda(ev)) {
+                return `<span class="inline-flex items-center gap-1 rounded-full border border-sky-800/60 bg-sky-950/30 px-2 py-1 text-[8px] font-black uppercase tracking-wider text-sky-200"><i data-lucide="calendar" class="w-3 h-3"></i> ${atendimento}</span>`;
+            }
+            return `<span class="inline-flex items-center gap-1 rounded-full border border-[#d4af37]/35 bg-[#d4af37]/10 px-2 py-1 text-[8px] font-black uppercase tracking-wider text-[#f0d48a]">ERP <span class="text-[#8b7440]">|</span> ${atendimento}</span>`;
+        };
+        window.urlExternaValida = (url) => {
+            const raw = String(url || '').trim();
+            if (!raw) return '';
+            try {
+                const parsed = new URL(raw);
+                return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '';
+            } catch(e) {
+                return '';
+            }
+        };
+        window.JAZZ_CINNAMON_LOGO_URL = '/assets/logo-jazz-cinnamon.png';
+        window.PRODUTORA_LOGO_URL = '/assets/logo-produtora.png';
+        window.obterImagemPdfHtml = async (opcoes = {}) => {
+            const altura = Math.max(20, Number(opcoes.altura) || 44);
+            const maxLargura = Math.max(90, Number(opcoes.maxLargura) || 220);
+            const estiloBase = `display: block; height: ${altura}px; width: auto; max-width: ${maxLargura}px;`;
+            const imagemUrl = String(opcoes.url || '').trim();
+            const alt = window.escapeHtml(opcoes.alt || 'Logo');
+            const fallbackHtml = opcoes.fallbackHtml || '';
+
+            if (!imagemUrl) return fallbackHtml;
+            return `<img src="${window.escapeHtml(imagemUrl)}" alt="${alt}" style="${estiloBase}">`;
+        };
+        window.obterLogosCabecalhoFinanceiroHtml = async () => {
+            const [logoJazz, logoProdutora] = await Promise.all([
+                window.obterImagemPdfHtml({
+                    url: window.JAZZ_CINNAMON_LOGO_URL,
+                    alt: 'Jazz Cinnamon',
+                    altura: 48,
+                    maxLargura: 220,
+                    fallbackHtml: '<div style="font-size: 16px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; color: #111827;">Jazz Cinnamon</div>'
+                }),
+                window.obterImagemPdfHtml({
+                    url: window.PRODUTORA_LOGO_URL,
+                    alt: 'Produtora',
+                    altura: 42,
+                    maxLargura: 180,
+                    fallbackHtml: ''
+                })
+            ]);
+
+            const logos = [logoJazz, logoProdutora].filter(Boolean).join('');
+            if (!logos) {
+                return '<div style="font-size: 16px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; color: #111827;">Jazz Cinnamon</div>';
+            }
+
+            return `
+                <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                    ${logoJazz ? `<div style="display: flex; align-items: center; justify-content: center; min-height: 54px;">${logoJazz}</div>` : ''}
+                    ${logoProdutora ? `<div style="display: flex; align-items: center; justify-content: center; min-height: 48px; padding-left: 14px; border-left: 1px solid #d1d5db;">${logoProdutora}</div>` : ''}
+                </div>
+            `;
+        };
+        window.formatarPercentualAtendimento = (valor) => `${window.safeNum(valor).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
+        window.formatarPeriodoFinanceiroPorExtenso = (mes, ano) => {
+            const meses = ['JANEIRO', 'FEVEREIRO', 'MARCO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+            if (String(mes) === 'todos') return `ANO COMPLETO DE ${ano}`;
+            const indice = Math.max(0, Math.min(11, parseInt(mes, 10) - 1));
+            return `${meses[indice]} DE ${ano}`;
+        };
+        window.obterResumoAtendimentoFinanceiro = (atendimento = {}) => {
+            const luciano = {
+                qtd: window.safeNum(atendimento.Luciano?.qtd || 0),
+                total: window.safeNum(atendimento.Luciano?.total || 0)
+            };
+            const serginho = {
+                qtd: window.safeNum(atendimento.Serginho?.qtd || 0),
+                total: window.safeNum(atendimento.Serginho?.total || 0)
+            };
+            const totalQtd = luciano.qtd + serginho.qtd;
+            const totalValor = luciano.total + serginho.total;
+
+            return {
+                totalQtd,
+                totalValor,
+                Luciano: {
+                    ...luciano,
+                    percentualQtd: totalQtd > 0 ? (luciano.qtd / totalQtd) * 100 : 0
+                },
+                Serginho: {
+                    ...serginho,
+                    percentualQtd: totalQtd > 0 ? (serginho.qtd / totalQtd) * 100 : 0
+                }
+            };
+        };
         window.formatarHorasConversao = (horas) => {
             if(horas === null || horas === undefined || horas === '') return '--';
             const valor = window.safeNum(horas);
@@ -609,6 +749,104 @@
         window.formatarMoedaParaInput = (i) => { let v = i.value.replace(/\D/g,""); v = (v/100).toFixed(2)+""; v = v.replace(".",",").replace(/(\d)(\d{3})(\d{3}),/g,"$1.$2.$3,").replace(/(\d)(\d{3}),/g,"$1.$2,"); i.value = "R$ "+v; };
         window.formatarCpfCnpj = (i) => { let v = i.value.replace(/\D/g, ""); if (v.length <= 11) { v = v.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2"); } else { v = v.substring(0, 14).replace(/^(\d{2})(\d)/, "$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d)/, "$1-$2"); } i.value = v; };
         window.compilarAnexos = (ev) => { if(!ev) return []; let raw = []; if(ev.anexos) { if(Array.isArray(ev.anexos)) raw = [...ev.anexos]; else Object.values(ev.anexos).forEach(a => raw.push(a)); } return raw; };
+        window.ehSubeventoGrupo = (ev = {}) => Boolean(ev?.ehSubevento && ev?.eventoPrincipalId && ev.eventoPrincipalId !== ev.id);
+        window.eventoContaNoPainelPrincipal = (ev = {}) => !window.ehSubeventoGrupo(ev);
+        window.obterEventosPainelPrincipais = () => window.dadosGlobais.filter((ev) => window.eventoContaNoPainelPrincipal(ev));
+        window.ordenarEventosGrupo = (eventos = []) => [...eventos].sort((a, b) => {
+            const ordemA = window.safeNum(a.subeventoOrdem || (a.ehEventoPrincipal ? 1 : 999));
+            const ordemB = window.safeNum(b.subeventoOrdem || (b.ehEventoPrincipal ? 1 : 999));
+            if (ordemA !== ordemB) return ordemA - ordemB;
+            const dataA = window.formatarDataInputDate(a.dataStr);
+            const dataB = window.formatarDataInputDate(b.dataStr);
+            if (dataA !== dataB) return String(dataA || '').localeCompare(String(dataB || ''));
+            return String(a.horaInicio || '').localeCompare(String(b.horaInicio || ''));
+        });
+        window.obterEventoPrincipalGrupo = (evOuId) => {
+            const ev = typeof evOuId === 'string'
+                ? window.dadosGlobais.find((item) => item.id === evOuId)
+                : evOuId;
+            if (!ev) return null;
+            if (!window.ehSubeventoGrupo(ev)) return ev;
+            return window.dadosGlobais.find((item) => item.id === ev.eventoPrincipalId) || ev;
+        };
+        window.obterEventosGrupo = (evOuId) => {
+            const principal = window.obterEventoPrincipalGrupo(evOuId);
+            if (!principal) return [];
+            const grupoId = principal.grupoId || principal.id;
+            return window.ordenarEventosGrupo(window.dadosGlobais.filter((item) => {
+                if (item.id === principal.id) return true;
+                if (item.grupoId && item.grupoId === grupoId) return true;
+                return item.eventoPrincipalId && item.eventoPrincipalId === principal.id;
+            }));
+        };
+        window.atualizarTerminoSubeventoCard = (card) => {
+            if (!card) return;
+            const hora = card.querySelector('.js-uni-subevento-hora')?.value || '';
+            const duracao = card.querySelector('.js-uni-subevento-duracao')?.value || '1:30';
+            const label = card.querySelector('.js-uni-subevento-termino');
+            if (label) label.textContent = hora ? window.horaTerminoCalculado(hora, duracao) : '--:--';
+        };
+        window.renderizarSubeventosGrupoModal = (principal) => {
+            const wrap = document.getElementById('uni-grupo-wrap');
+            const resumo = document.getElementById('uni-grupo-resumo');
+            const lista = document.getElementById('uni-subeventos-lista');
+            if (!wrap || !resumo || !lista) return;
+
+            const grupo = window.obterEventosGrupo(principal);
+            const subeventos = grupo.filter((item) => item.id !== principal.id);
+            if (!subeventos.length) {
+                wrap.classList.add('hidden');
+                resumo.textContent = '';
+                lista.innerHTML = '';
+                return;
+            }
+
+            resumo.textContent = `${grupo.length} datas`;
+            lista.innerHTML = subeventos.map((item, indice) => `
+                <div class="bg-[#151922] border border-[#2a2e39] rounded-lg p-3 space-y-3" data-subevento-id="${window.escapeHtml(item.id)}" data-subevento-ordem="${window.escapeHtml(String(item.subeventoOrdem || indice + 2))}">
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-[#d4af37]">Apresentacao ${window.escapeHtml(String(item.subeventoOrdem || indice + 2))}</span>
+                        <span class="text-[9px] text-gray-500 uppercase tracking-widest">${window.escapeHtml(window.formatarDataExibicao(item.dataStr))}</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <label class="text-[9px] text-gray-500 uppercase">Data</label>
+                            <input type="date" class="input-erp w-full p-2 text-xs text-[#d4af37] font-bold js-uni-subevento-data" value="${window.escapeHtml(window.formatarDataInputDate(item.dataStr))}">
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-gray-500 uppercase">Hora</label>
+                            <input type="time" class="input-erp w-full p-2 text-xs text-white font-bold js-uni-subevento-hora" value="${window.escapeHtml(item.horaInicio || '')}" oninput="window.atualizarTerminoSubeventoCard(this.closest('[data-subevento-id]'))">
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-gray-500 uppercase">Duracao</label>
+                            <select class="input-erp w-full p-2 text-xs font-bold text-white js-uni-subevento-duracao" onchange="window.atualizarTerminoSubeventoCard(this.closest('[data-subevento-id]'))">
+                                <option value="1:00" ${item.duracao === '1:00' ? 'selected' : ''}>1h</option>
+                                <option value="1:30" ${(item.duracao || '1:30') === '1:30' ? 'selected' : ''}>1.5h</option>
+                                <option value="2:00" ${item.duracao === '2:00' ? 'selected' : ''}>2h</option>
+                                <option value="2:30" ${item.duracao === '2:30' ? 'selected' : ''}>2.5h</option>
+                                <option value="3:00" ${item.duracao === '3:00' ? 'selected' : ''}>3h</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="text-[8px] uppercase tracking-widest text-gray-500">Termino: <span class="js-uni-subevento-termino text-[#d4af37] font-bold">${window.escapeHtml(window.horaTerminoCalculado(item.horaInicio, item.duracao))}</span></div>
+                </div>
+            `).join('');
+            wrap.classList.remove('hidden');
+            lista.querySelectorAll('[data-subevento-id]').forEach((card) => window.atualizarTerminoSubeventoCard(card));
+        };
+        window.coletarSubeventosEditadosModal = () => Array.from(document.querySelectorAll('#uni-subeventos-lista [data-subevento-id]')).map((card) => {
+            const dataStr = card.querySelector('.js-uni-subevento-data')?.value || '';
+            const horaInicio = card.querySelector('.js-uni-subevento-hora')?.value || '';
+            const duracao = card.querySelector('.js-uni-subevento-duracao')?.value || '1:30';
+            return {
+                id: card.dataset.subeventoId,
+                subeventoOrdem: parseInt(card.dataset.subeventoOrdem || '0', 10) || 0,
+                dataStr,
+                horaInicio,
+                duracao,
+                horaTermino: window.horaTerminoCalculado(horaInicio, duracao)
+            };
+        });
 
         window.payloadDisponibilidadePublica = (ev) => ({
             dataStr: ev.dataStr || ev.data || "",
@@ -1460,7 +1698,7 @@
             const sAno = { pre: {qtd:0}, reserva: {valor:0}, conf: {valor:0}, semPgto: {qtd:0} };
             const notificacoes = [];
             
-            window.dadosGlobais.forEach(ev => {
+            window.obterEventosPainelPrincipais().forEach(ev => {
                 const d = window.extrairAnoMes(ev.dataStr);
                 const dataEvFormatada = window.formatarDataExibicao(ev.dataStr);
                 
@@ -1679,7 +1917,7 @@
             window.abaAtual = status;
             const mes = document.getElementById('filtroMes').value; 
             const ano = document.getElementById('filtroAno').value; 
-            const filtrados = window.dadosGlobais.filter(ev => {
+            const filtrados = window.obterEventosPainelPrincipais().filter(ev => {
                 const dataEv = window.extrairAnoMes(ev.dataStr);
                 const periodoOk = dataEv.ano === ano && (mes === 'todos' || parseInt(dataEv.mes) === parseInt(mes));
                 if (!periodoOk) return false;
@@ -1740,6 +1978,7 @@
                 }
                 const linkWhats = `https://wa.me/55${(ev.whatsapp || '').toString().replace(/\D/g, '')}?text=${encodeURIComponent(msgWpp)}`;
                 const estaComProblema = !ev.agendaId;
+                const tagOrigemHTML = window.renderTagOrigemEvento(ev);
                 const borderColor = status === 'PRE_RESERVA' ? 'border-cyan-400' : (status === 'RESERVA' ? 'border-green-500' : (status === 'SEM_PGTO' ? 'border-red-500' : 'border-purple-500'));
                 let barColor = 'bg-[#38bdf8]'; let statusTxt = 'PENDENTE'; let colorTxt = 'text-cyan-300';
                 if(percent >= 100) { barColor = 'bg-[#10b981]'; statusTxt = 'QUITADO'; colorTxt = 'text-[#10b981]'; }
@@ -1766,9 +2005,14 @@
                         <div class="flex items-center mb-1 min-w-0"><h2 class="text-sm font-black text-white uppercase truncate">${ev.cliente}</h2>${btnContratoNomeHTML}</div>
                         <div class="text-[8px] text-gray-500 font-bold uppercase flex items-center gap-1 tracking-widest mb-4"><i data-lucide="map-pin" class="w-2.5 h-2.5"></i> ${ev.tipo || 'OUTROS'} • ${ev.cidade || 'CIDADE'} - ${ev.uf || 'UF'}</div>
                         ${leadInfoHTML}
-                        <div class="flex justify-between items-center mb-4">
-                            <div class="text-2xl font-black text-[#d4af37] tracking-tight">${dataPt}</div>
-                            <div class="flex items-center">
+                        <div class="flex justify-between items-center gap-3 mb-4">
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <div class="text-2xl font-black text-[#d4af37] tracking-tight">${dataPt}</div>
+                                    ${tagOrigemHTML}
+                                </div>
+                            </div>
+                            <div class="flex items-center shrink-0">
                                 ${estaComProblema ? `<button onclick="window.salvarDiretoAgenda('${ev.id}')" class="border border-[#d4af37] text-[#d4af37] text-[8px] px-2 py-1 rounded font-black uppercase hover:bg-[#d4af37]/10 transition animate-pulse"><i data-lucide="calendar-plus" class="w-2.5 h-2.5 inline mr-1"></i> SALVAR NA AGENDA</button>` : `<span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">${diaSem} • ${ev.horaInicio || '00:00'} ÀS ${window.horaTerminoCalculado(ev.horaInicio, ev.duracao)}</span>`}
                             </div>
                         </div>
@@ -2023,6 +2267,7 @@
                 if(document.getElementById('uni-data')) document.getElementById('uni-data').value = window.formatarDataInputDate(ev.dataStr);
                 if(document.getElementById('uni-hora')) document.getElementById('uni-hora').value = ev.horaInicio || '';
                 if(document.getElementById('uni-duracao')) document.getElementById('uni-duracao').value = ev.duracao || '1:30';
+                if(document.getElementById('uni-atendimento')) document.getElementById('uni-atendimento').value = window.obterAtendimentoEvento(ev);
 
                 if(window.atualizarExibicaoHoraTermino) window.atualizarExibicaoHoraTermino();
 
@@ -2039,6 +2284,7 @@
 
                 // Campos diretos do banco
                 if(document.getElementById('uni-roadie')) document.getElementById('uni-roadie').checked = (ev.roadie === "SIM");
+                if(document.getElementById('uni-sem-producao')) document.getElementById('uni-sem-producao').value = window.normalizarSemProducao(ev.semProducao) || "";
                 if(document.getElementById('uni-gas-luc')) document.getElementById('uni-gas-luc').value = ev.gasL !== undefined ? ev.gasL : "";
                 if(document.getElementById('uni-gas-ser')) document.getElementById('uni-gas-ser').value = ev.gasS !== undefined ? ev.gasS : "";
                 if(document.getElementById('uni-gas-ces')) document.getElementById('uni-gas-ces').value = ev.gasC !== undefined ? ev.gasC : "";
@@ -2072,6 +2318,70 @@
                     display.innerText = `TÉRMINO: ${termino}`;
                 }
             }
+        };
+
+        window.normalizarSemProducao = (valor) => {
+            const texto = String(valor ?? '').trim().toUpperCase();
+            if(!texto || texto === 'NULL' || texto === 'UNDEFINED') return null;
+            if(['S', 'SIM', 'TRUE'].includes(texto)) return 'S';
+            if(['N', 'NAO', 'NÃO', 'FALSE'].includes(texto)) return 'N';
+            return null;
+        };
+
+        window.calcularSplitFechamentoBanda = (config = {}) => {
+            const numero = (valor) => parseFloat(valor) || 0;
+            const valorTotal = numero(config.valorTotal ?? config.valor ?? 0);
+            const opNf = String(config.opNf ?? config.temNf ?? 'NAO').trim().toUpperCase();
+            const roadieAtivo = config.roadie === "SIM" || config.roadie === true || config.roadie === 'true';
+            const semProducao = window.normalizarSemProducao(config.semProducao);
+            const usarSemProducao = semProducao === 'S';
+
+            const aplicaImposto = opNf === 'SIM' || opNf === 'ABSORVIDA' || opNf === 'TRUE';
+            const imposto = aplicaImposto ? (valorTotal * 0.12) : 0;
+            const roadieCusto = roadieAtivo ? 100 : 0;
+            const gasL = numero(config.gasL);
+            const gasS = numero(config.gasS);
+            const gasC = numero(config.gasC);
+            const gasLevi = numero(config.gasLevi);
+            const van = numero(config.van);
+            const totalGasolina = gasL + gasS + gasC + gasLevi;
+            const despesasLogistica = roadieCusto + totalGasolina + van;
+            const despesasTotais = imposto + despesasLogistica;
+            const liquidoDivisivel = valorTotal - despesasTotais;
+            const divisorRateio = usarSemProducao ? 4 : 5;
+            const baseRateio = divisorRateio ? (liquidoDivisivel / divisorRateio) : 0;
+            const fundoProducao = usarSemProducao ? 0 : baseRateio;
+            const prodIndiv = usarSemProducao ? 0 : (fundoProducao / 2);
+            const baseIntegrante = usarSemProducao ? baseRateio : fundoProducao;
+
+            return {
+                semProducao,
+                usarSemProducao,
+                modoRateio: usarSemProducao ? 'Sem producao (/4)' : 'Com producao (/5)',
+                divisorRateio,
+                valorTotal,
+                imposto,
+                roadieCusto,
+                gasL,
+                gasS,
+                gasC,
+                gasLevi,
+                van,
+                totalGasolina,
+                despesasLogistica,
+                despesasTotais,
+                liquidoDivisivel,
+                baseRateio,
+                baseIntegrante,
+                fundoProducao,
+                prodIndiv,
+                caches: {
+                    l: baseIntegrante + (usarSemProducao ? 0 : prodIndiv) + gasL,
+                    s: baseIntegrante + (usarSemProducao ? 0 : prodIndiv) + gasS,
+                    c: baseIntegrante + roadieCusto + gasC,
+                    v: baseIntegrante + gasLevi
+                }
+            };
         };
 
         window.recalcularTotalUnificado = () => {
@@ -2151,6 +2461,18 @@
                 let cacheCesimbra = fundoProducao + roadieCusto + gasC;
                 let cacheLevi = fundoProducao + gasLevi;
 
+                const split = window.calcularSplitFechamentoBanda({
+                    valorTotal,
+                    opNf,
+                    roadie: document.getElementById('uni-roadie')?.checked,
+                    gasL: document.getElementById('uni-gas-luc')?.value,
+                    gasS: document.getElementById('uni-gas-ser')?.value,
+                    gasC: document.getElementById('uni-gas-ces')?.value,
+                    gasLevi: document.getElementById('uni-gas-lev')?.value,
+                    van: document.getElementById('uni-custo-van')?.value,
+                    semProducao: document.getElementById('uni-sem-producao')?.value
+                });
+
                 const splitRes = document.getElementById('uni-split-results');
                 if(splitRes) {
                     splitRes.innerHTML = `
@@ -2158,11 +2480,15 @@
                             <h4 class="text-[10px] text-center text-gray-400 font-black uppercase tracking-widest mb-2">Distribuição de Cachês</h4>
                             <div class="flex justify-between text-[11px] text-[#10b981] font-black">
                                 <span>Líquido Divisível</span>
-                                <span>${window.fmtMoeda_n(liquidoDivisivel)}</span>
+                                <span>${window.fmtMoeda_n(split.liquidoDivisivel)}</span>
                             </div>
                             <div class="flex justify-between text-[9px] text-gray-500 font-bold mt-1">
                                 <span>Fundo Produção</span>
-                                <span>${window.fmtMoeda_n(fundoProducao)}</span>
+                                <span>${window.fmtMoeda_n(split.usarSemProducao ? split.baseRateio : split.fundoProducao)}</span>
+                            </div>
+                            <div class="flex justify-between text-[9px] text-gray-500 font-bold mt-1">
+                                <span>Modo</span>
+                                <span>${split.modoRateio}</span>
                             </div>
                         </div>
                         
@@ -2171,12 +2497,12 @@
                             <div>
                                 <div class="flex justify-between text-[#d4af37] font-bold text-[11px]">
                                     <span>Luciano</span>
-                                    <span>${window.fmtMoeda_n(cacheLuciano)}</span>
+                                    <span>${window.fmtMoeda_n(split.caches.l)}</span>
                                 </div>
                                 <div class="text-[9px] text-gray-500 font-medium leading-tight mt-1">
-                                    Base: ${window.fmtMoeda(fundoProducao)}<br>
-                                    Prod: ${window.fmtMoeda(prodIndiv)}
-                                    ${gasL > 0 ? `<br>Gas: ${window.fmtMoeda(gasL)}` : ''}
+                                    Base: ${window.fmtMoeda(split.baseIntegrante)}
+                                    ${split.usarSemProducao ? '' : `<br>Prod: ${window.fmtMoeda(split.prodIndiv)}`}
+                                    ${split.gasL > 0 ? `<br>Gas: ${window.fmtMoeda(split.gasL)}` : ''}
                                 </div>
                             </div>
 
@@ -2184,12 +2510,12 @@
                             <div>
                                 <div class="flex justify-between text-[#d4af37] font-bold text-[11px]">
                                     <span>Serginho</span>
-                                    <span>${window.fmtMoeda_n(cacheSerginho)}</span>
+                                    <span>${window.fmtMoeda_n(split.caches.s)}</span>
                                 </div>
                                 <div class="text-[9px] text-gray-500 font-medium leading-tight mt-1">
-                                    Base: ${window.fmtMoeda(fundoProducao)}<br>
-                                    Prod: ${window.fmtMoeda(prodIndiv)}
-                                    ${gasS > 0 ? `<br>Gas: ${window.fmtMoeda(gasS)}` : ''}
+                                    Base: ${window.fmtMoeda(split.baseIntegrante)}
+                                    ${split.usarSemProducao ? '' : `<br>Prod: ${window.fmtMoeda(split.prodIndiv)}`}
+                                    ${split.gasS > 0 ? `<br>Gas: ${window.fmtMoeda(split.gasS)}` : ''}
                                 </div>
                             </div>
 
@@ -2197,12 +2523,12 @@
                             <div>
                                 <div class="flex justify-between text-white font-bold text-[11px]">
                                     <span>Cesimbra</span>
-                                    <span>${window.fmtMoeda_n(cacheCesimbra)}</span>
+                                    <span>${window.fmtMoeda_n(split.caches.c)}</span>
                                 </div>
                                 <div class="text-[9px] text-gray-500 font-medium leading-tight mt-1">
-                                    Base: ${window.fmtMoeda(fundoProducao)}
-                                    ${roadieCusto > 0 ? `<br>Roadie: ${window.fmtMoeda(roadieCusto)}` : ''}
-                                    ${gasC > 0 ? `<br>Gas: ${window.fmtMoeda(gasC)}` : ''}
+                                    Base: ${window.fmtMoeda(split.baseIntegrante)}
+                                    ${split.roadieCusto > 0 ? `<br>Roadie: ${window.fmtMoeda(split.roadieCusto)}` : ''}
+                                    ${split.gasC > 0 ? `<br>Gas: ${window.fmtMoeda(split.gasC)}` : ''}
                                 </div>
                             </div>
 
@@ -2210,11 +2536,11 @@
                             <div>
                                 <div class="flex justify-between text-white font-bold text-[11px]">
                                     <span>Levi</span>
-                                    <span>${window.fmtMoeda_n(cacheLevi)}</span>
+                                    <span>${window.fmtMoeda_n(split.caches.v)}</span>
                                 </div>
                                 <div class="text-[9px] text-gray-500 font-medium leading-tight mt-1">
-                                    Base: ${window.fmtMoeda(fundoProducao)}
-                                    ${gasLevi > 0 ? `<br>Gas: ${window.fmtMoeda(gasLevi)}` : ''}
+                                    Base: ${window.fmtMoeda(split.baseIntegrante)}
+                                    ${split.gasLevi > 0 ? `<br>Gas: ${window.fmtMoeda(split.gasLevi)}` : ''}
                                 </div>
                             </div>
                         </div>
@@ -2363,11 +2689,13 @@
                     horaInicio: horaInicioStr,
                     duracao: duracaoStr,
                     horaTermino: horaTerminoCalc,
+                    atendimento: window.normalizarAtendimento(document.getElementById('uni-atendimento').value, 'Luciano'),
                     temNf: opNf,
                     valor: valorTotal,
                     valorPago: parseFloat(document.getElementById('uni-valor-pago').value || 0),
                     statusPgto: document.getElementById('uni-status-pgto').value,
                     roadie: document.getElementById('uni-roadie').checked ? "SIM" : "NÃO",
+                    semProducao: window.normalizarSemProducao(document.getElementById('uni-sem-producao')?.value),
                     gasL: parseFloat(document.getElementById('uni-gas-luc').value || 0),
                     gasS: parseFloat(document.getElementById('uni-gas-ser').value || 0),
                     gasC: parseFloat(document.getElementById('uni-gas-ces').value || 0),
@@ -2387,10 +2715,13 @@
                     const pdfReq = await fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify(pdfPayload) }).then(r => r.json());
                     
                     if(pdfReq.success) {
+                        const pdfUrl = window.urlExternaValida(pdfReq.pdfUrl);
+                        if(!pdfUrl) throw new Error('PDF gerado, mas o link retornou vazio ou invalido.');
+
                         let anexos = evAtual.anexos ? [...evAtual.anexos] : [];
                         let countOrc = anexos.filter(a => a.nome && a.nome.toUpperCase().startsWith('ORÇAMENTO')).length;
                         let nomeAnexo = `Orçamento (${countOrc + 1})`;
-                        anexos.push({ nome: nomeAnexo, url: pdfReq.pdfUrl, data: new Date().toISOString() });
+                        anexos.push({ nome: nomeAnexo, url: pdfUrl, data: new Date().toISOString() });
                         
                         const camposPdf = {
                             anexos: anexos,
@@ -2410,8 +2741,15 @@
 
                         window.fecharModalUnificado(); 
                         let msgPdf = modoPdf === true ? 'PDF gerado e enviado por e-mail!' : 'PDF gerado e guardado no sistema (não enviado).';
-                        Swal.fire({ icon:'success', title:'Tudo Pronto!', text: msgPdf, confirmButtonText: 'Ver PDF', confirmButtonColor: '#d4af37', background:'#1a1d24', color:'#fff'}).then(r => {
-                            if(r.isConfirmed) window.open(pdfReq.pdfUrl, '_blank');
+                        const linkPdf = window.escapeHtml(pdfUrl);
+                        Swal.fire({
+                            icon:'success',
+                            title:'Tudo Pronto!',
+                            html: `<p>${window.escapeHtml(msgPdf)}</p><a href="${linkPdf}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center mt-4 px-5 py-3 rounded-lg bg-[#d4af37] text-black text-xs font-black uppercase tracking-widest">Abrir PDF</a>`,
+                            confirmButtonText: 'Fechar',
+                            confirmButtonColor: '#d4af37',
+                            background:'#1a1d24',
+                            color:'#fff'
                         });
                     } else throw new Error(pdfReq.error);
                 } else {
@@ -2431,6 +2769,247 @@
                 Swal.fire({icon:'success', title:'Agenda Sincronizada', timer:1500, showConfirmButton:false, background:'#1a1d24', color:'#fff'});
             } catch(e) {
                 Swal.fire('Erro', e.message || 'Nao foi possivel sincronizar a Agenda.', 'error');
+            }
+        };
+
+        window.abrirEdicaoUnificada = (id) => {
+            console.log("Abrindo modal edicao para:", id);
+            try {
+                window.switchTab('editar');
+                const solicitado = window.dadosGlobais.find((item) => item.id === id);
+                const ev = window.obterEventoPrincipalGrupo(solicitado || id);
+                if (!ev) return;
+
+                const grupo = window.obterEventosGrupo(ev);
+                const grupoId = ev.grupoId || ev.id;
+                const qtdDatasGrupo = grupo.length;
+
+                if(document.getElementById('uni-id')) document.getElementById('uni-id').value = ev.id;
+                if(document.getElementById('uni-grupo-id')) document.getElementById('uni-grupo-id').value = grupoId;
+                if(document.getElementById('uni-agenda-id')) document.getElementById('uni-agenda-id').value = ev.agendaId || '';
+                if(document.getElementById('uni-tipo')) document.getElementById('uni-tipo').value = ev.tipo || 'OUTROS';
+                if(document.getElementById('uni-cliente-hidden')) document.getElementById('uni-cliente-hidden').value = ev.cliente || '';
+
+                if(document.getElementById('uni-nome')) document.getElementById('uni-nome').innerText = ev.cliente || 'Sem Nome';
+                if(document.getElementById('uni-cliente-input')) document.getElementById('uni-cliente-input').value = ev.cliente || '';
+
+                const wppNum = (ev.whatsapp || '').toString().replace(/\D/g, '');
+                const btnWpp = document.getElementById('uni-wpp-link');
+                if(btnWpp) {
+                    if(wppNum) { btnWpp.href = `https://wa.me/55${wppNum}`; btnWpp.classList.remove('hidden'); }
+                    else btnWpp.classList.add('hidden');
+                }
+
+                const dataPt = window.formatarDataExibicao(ev.dataStr);
+                const resumoGrupo = qtdDatasGrupo > 1 ? ` | Grupo com ${qtdDatasGrupo} datas` : '';
+                if(document.getElementById('uni-info-extra')) document.getElementById('uni-info-extra').innerText = `Data principal: ${dataPt} | ${ev.cidade || 'CIDADE'} - ${ev.uf || 'UF'}${resumoGrupo}`;
+
+                let badgeClass = ev.status === 'CONFIRMADO' ? 'text-purple-400 border-purple-500 bg-purple-900/20' : (ev.status === 'RESERVA' ? 'text-green-400 border-green-500 bg-green-900/20' : 'text-cyan-300 border-cyan-400 bg-cyan-950/30');
+                let estaComProblema = !ev.agendaId;
+                if (estaComProblema) badgeClass = 'text-red-500 border-red-500 bg-red-900/20 animate-pulse';
+
+                let badgeEl = document.getElementById('uni-badge-status');
+                if(badgeEl) {
+                    badgeEl.className = `mt-1 text-[9px] font-black px-3 py-1 rounded uppercase border hover:opacity-80 transition cursor-pointer shadow-sm flex items-center gap-1 w-max ${badgeClass}`;
+                    badgeEl.innerHTML = `<i data-lucide="${estaComProblema ? 'calendar-plus' : 'calendar-sync'}" class="w-3 h-3"></i> ${estaComProblema ? 'SALVAR NA AGENDA' : 'SINCRONIZAR AGENDA'}`;
+                    if(window.lucide) window.lucide.createIcons();
+                }
+
+                if(document.getElementById('uni-doc')) {
+                    document.getElementById('uni-doc').value = ev.documento || '';
+                    window.formatarCpfCnpj(document.getElementById('uni-doc'));
+                }
+
+                if(document.getElementById('uni-data')) document.getElementById('uni-data').value = window.formatarDataInputDate(ev.dataStr);
+                if(document.getElementById('uni-hora')) document.getElementById('uni-hora').value = ev.horaInicio || '';
+                if(document.getElementById('uni-duracao')) document.getElementById('uni-duracao').value = ev.duracao || '1:30';
+                if(document.getElementById('uni-atendimento')) document.getElementById('uni-atendimento').value = window.obterAtendimentoEvento(ev);
+                if(window.atualizarExibicaoHoraTermino) window.atualizarExibicaoHoraTermino();
+
+                let opNf = ev.temNf || "NÃO";
+                let valorTotalBD = ev.valorNum || 0;
+                let valorOrcamentoBase = (opNf === "SIM") ? (valorTotalBD / 1.12) : valorTotalBD;
+
+                if(document.getElementById('uni-temnf')) document.getElementById('uni-temnf').value = opNf;
+                if(document.getElementById('uni-valor-input')) document.getElementById('uni-valor-input').value = window.fmtMoeda_n(valorOrcamentoBase);
+                if(document.getElementById('uni-status-pgto')) document.getElementById('uni-status-pgto').value = ev.statusPgto || 'PENDENTE';
+                if(document.getElementById('uni-valor-pago')) document.getElementById('uni-valor-pago').value = window.safeNum(ev.valorPagoNum) || '';
+                if(document.getElementById('uni-roadie')) document.getElementById('uni-roadie').checked = (ev.roadie === "SIM");
+                if(document.getElementById('uni-sem-producao')) document.getElementById('uni-sem-producao').value = window.normalizarSemProducao(ev.semProducao) || "";
+                if(document.getElementById('uni-gas-luc')) document.getElementById('uni-gas-luc').value = ev.gasL !== undefined ? ev.gasL : "";
+                if(document.getElementById('uni-gas-ser')) document.getElementById('uni-gas-ser').value = ev.gasS !== undefined ? ev.gasS : "";
+                if(document.getElementById('uni-gas-ces')) document.getElementById('uni-gas-ces').value = ev.gasC !== undefined ? ev.gasC : "";
+                if(document.getElementById('uni-gas-lev')) document.getElementById('uni-gas-lev').value = ev.gasLevi !== undefined ? ev.gasLevi : "";
+                if(document.getElementById('uni-custo-van')) document.getElementById('uni-custo-van').value = ev.van !== undefined ? ev.van : "";
+
+                window.renderizarSubeventosGrupoModal(ev);
+                if(window.renderListaAnexosModal) window.renderListaAnexosModal(ev.id, window.compilarAnexos(ev));
+                if(window.recalcularTotalUnificado) window.recalcularTotalUnificado();
+
+                const modal = document.getElementById('modal-unificado');
+                if(modal) {
+                    modal.classList.remove('hidden');
+                    modal.style.display = 'flex';
+                }
+            } catch(e) {
+                console.error("Erro critico ao abrir modal:", e);
+                alert("Erro ao abrir janela: " + e.message);
+            }
+        };
+
+        window.salvarUnificado = async (modoPdf) => {
+            try {
+                const id = document.getElementById('uni-id').value;
+                const evAtual = window.dadosGlobais.find((e) => e.id === id) || {};
+                const grupoId = document.getElementById('uni-grupo-id')?.value || evAtual.grupoId || id;
+                const eventosGrupo = window.obterEventosGrupo(evAtual);
+                const subeventosEditados = window.coletarSubeventosEditadosModal();
+
+                const opNf = document.getElementById('uni-temnf').value;
+                const inputValStr = document.getElementById('uni-valor-input').value;
+                const valorOrcamento = window.parseMoeda(inputValStr);
+                const valorTotal = (opNf === "SIM") ? (valorOrcamento * 1.12) : valorOrcamento;
+                const docLimpo = document.getElementById('uni-doc').value.replace(/\D/g, "");
+
+                const horaInicioStr = document.getElementById('uni-hora').value;
+                const duracaoStr = document.getElementById('uni-duracao').value;
+                const horaTerminoCalc = window.horaTerminoCalculado(horaInicioStr, duracaoStr);
+                const atendimento = window.normalizarAtendimento(document.getElementById('uni-atendimento').value, 'Luciano');
+
+                const payloadPrincipal = {
+                    cliente: document.getElementById('uni-cliente-input').value.toUpperCase(),
+                    documento: document.getElementById('uni-doc').value,
+                    documentoLimpo: docLimpo,
+                    dataStr: document.getElementById('uni-data').value,
+                    horaInicio: horaInicioStr,
+                    duracao: duracaoStr,
+                    horaTermino: horaTerminoCalc,
+                    atendimento,
+                    temNf: opNf,
+                    valor: valorTotal,
+                    valorPago: parseFloat(document.getElementById('uni-valor-pago').value || 0),
+                    statusPgto: document.getElementById('uni-status-pgto').value,
+                    roadie: document.getElementById('uni-roadie').checked ? "SIM" : "NÃO",
+                    semProducao: window.normalizarSemProducao(document.getElementById('uni-sem-producao')?.value),
+                    gasL: parseFloat(document.getElementById('uni-gas-luc').value || 0),
+                    gasS: parseFloat(document.getElementById('uni-gas-ser').value || 0),
+                    gasC: parseFloat(document.getElementById('uni-gas-ces').value || 0),
+                    gasLevi: parseFloat(document.getElementById('uni-gas-lev').value || 0),
+                    van: parseFloat(document.getElementById('uni-custo-van').value || 0),
+                    grupoId,
+                    eventoPrincipalId: id,
+                    ehEventoPrincipal: true,
+                    ehSubevento: false,
+                    temSubeventos: subeventosEditados.length > 0,
+                    qtdApresentacoes: subeventosEditados.length + 1,
+                    subeventosIds: subeventosEditados.map((item) => item.id)
+                };
+
+                const apresentacoesGrupo = [
+                    {
+                        pedidoId: id,
+                        ordem: 1,
+                        dataStr: payloadPrincipal.dataStr,
+                        horaInicio: payloadPrincipal.horaInicio,
+                        duracao: payloadPrincipal.duracao,
+                        horaTermino: payloadPrincipal.horaTermino,
+                        ehPrincipal: true
+                    },
+                    ...subeventosEditados.map((item) => ({
+                        pedidoId: item.id,
+                        ordem: item.subeventoOrdem || 0,
+                        dataStr: item.dataStr,
+                        horaInicio: item.horaInicio,
+                        duracao: item.duracao,
+                        horaTermino: item.horaTermino,
+                        ehPrincipal: false
+                    }))
+                ];
+
+                let msgLoading = modoPdf ? 'A gerar PDF e a atualizar base de dados...' : 'A sincronizar com a Agenda...';
+                Swal.fire({title:'A aguardar...', html: msgLoading, didOpen:()=>Swal.showLoading(), background:'#1a1d24', color:'#fff', allowOutsideClick: false});
+
+                const batch = writeBatch(db);
+                batch.set(doc(db, "pedidos", id), { ...payloadPrincipal, apresentacoesGrupo }, { merge: true });
+
+                subeventosEditados.forEach((subevento) => {
+                    const atual = eventosGrupo.find((item) => item.id === subevento.id) || {};
+                    batch.set(doc(db, "pedidos", subevento.id), {
+                        cliente: payloadPrincipal.cliente,
+                        documento: payloadPrincipal.documento,
+                        documentoLimpo: payloadPrincipal.documentoLimpo,
+                        atendimento: payloadPrincipal.atendimento,
+                        dataStr: subevento.dataStr,
+                        horaInicio: subevento.horaInicio,
+                        duracao: subevento.duracao,
+                        horaTermino: subevento.horaTermino,
+                        grupoId,
+                        eventoPrincipalId: id,
+                        ehEventoPrincipal: false,
+                        ehSubevento: true,
+                        subeventoOrdem: subevento.subeventoOrdem,
+                        pedidoPrincipalFinanceiroId: id,
+                        financeiroNoPrincipal: true,
+                        qtdApresentacoes: payloadPrincipal.qtdApresentacoes,
+                        temSubeventos: true,
+                        status: atual.status || evAtual.status || 'PRE_RESERVA',
+                        statusAgenda: atual.statusAgenda || evAtual.statusAgenda || 'LIVRE'
+                    }, { merge: true });
+                });
+
+                await batch.commit();
+
+                if (modoPdf) {
+                    const pdfPayload = { acao: "GERAR_PDF_ORCAMENTO", ...evAtual, ...payloadPrincipal, apresentacoesGrupo, enviarEmail: (modoPdf === true) };
+                    const pdfReq = await fetch(URL_BACKEND, { method: 'POST', body: JSON.stringify(pdfPayload) }).then(r => r.json());
+
+                    if(pdfReq.success) {
+                        const pdfUrl = window.urlExternaValida(pdfReq.pdfUrl);
+                        if(!pdfUrl) throw new Error('PDF gerado, mas o link retornou vazio ou invalido.');
+
+                        let anexos = evAtual.anexos ? [...evAtual.anexos] : [];
+                        let countOrc = anexos.filter(a => a.nome && a.nome.toUpperCase().startsWith('ORÇAMENTO')).length;
+                        let nomeAnexo = `Orçamento (${countOrc + 1})`;
+                        anexos.push({ nome: nomeAnexo, url: pdfUrl, data: new Date().toISOString() });
+
+                        const camposPdf = {
+                            anexos,
+                            dataGeracaoOrcamento: serverTimestamp(),
+                            data_geracao_orcamento: serverTimestamp()
+                        };
+                        if(modoPdf === true) {
+                            camposPdf.dataEnvioOrcamento = serverTimestamp();
+                            camposPdf.data_envio_orcamento = serverTimestamp();
+                            camposPdf.orcamentoEnviadoEm = serverTimestamp();
+                            if((evAtual.status || '').toUpperCase() === 'PRE_RESERVA') {
+                                camposPdf.status = 'RESERVA';
+                                if(!evAtual.data_reserva) camposPdf.data_reserva = serverTimestamp();
+                            }
+                        }
+                        await updateDoc(doc(db, "pedidos", id), camposPdf);
+
+                        window.fecharModalUnificado();
+                        const linkPdf = window.escapeHtml(pdfUrl);
+                        const msgPdf = modoPdf === true ? 'PDF gerado e enviado por e-mail!' : 'PDF gerado e guardado no sistema (nao enviado).';
+                        Swal.fire({
+                            icon:'success',
+                            title:'Tudo Pronto!',
+                            html: `<p>${window.escapeHtml(msgPdf)}</p><a href="${linkPdf}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center mt-4 px-5 py-3 rounded-lg bg-[#d4af37] text-black text-xs font-black uppercase tracking-widest">Abrir PDF</a>`,
+                            confirmButtonText: 'Fechar',
+                            confirmButtonColor: '#d4af37',
+                            background:'#1a1d24',
+                            color:'#fff'
+                        });
+                    } else {
+                        throw new Error(pdfReq.error);
+                    }
+                } else {
+                    window.fecharModalUnificado();
+                    Swal.fire({icon:'success', title:'Sistema salvo!', text:'Agenda sincronizada automaticamente.', timer:1800, showConfirmButton:false, background:'#1a1d24'});
+                }
+            } catch(e) {
+                console.error(e);
+                Swal.fire('Erro', 'Nao foi possivel guardar. Verifique a sua ligacao.', 'error');
             }
         };
 
@@ -2760,6 +3339,18 @@
                 let cacheLevi = fundoProducao + gasLevi;
 
                 // Captura a logo para não quebrar no celular (Fallbacks para segurança extrema)
+                const split = window.calcularSplitFechamentoBanda({
+                    valorTotal,
+                    opNf,
+                    roadie: document.getElementById('uni-roadie')?.checked,
+                    gasL: document.getElementById('uni-gas-luc')?.value,
+                    gasS: document.getElementById('uni-gas-ser')?.value,
+                    gasC: document.getElementById('uni-gas-ces')?.value,
+                    gasLevi: document.getElementById('uni-gas-lev')?.value,
+                    van: document.getElementById('uni-custo-van')?.value,
+                    semProducao: document.getElementById('uni-sem-producao')?.value
+                });
+
                 let logoHtml = `<img src="https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/logo%20preto%20(2).png?alt=media" crossorigin="anonymous" style="height: 40px; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto;">`;
                 try {
                     const response = await fetch('https://firebasestorage.googleapis.com/v0/b/jazz-cinnamon-erp.firebasestorage.app/o/logo%20preto%20(2).png?alt=media');
@@ -2796,23 +3387,23 @@
                             ${opNf !== "NÃO" ? `
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2px; color: #d93025;">
                                 <span>Impostos (NF)</span>
-                                <strong>- ${window.fmtMoeda_n(imposto)}</strong>
+                                <strong>- ${window.fmtMoeda_n(split.imposto)}</strong>
                             </div>` : ''}
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2px; color: #d93025;">
                                 <span>Despesas (Logística)</span>
-                                <strong>- ${window.fmtMoeda_n(despesasLogistica)}</strong>
+                                <strong>- ${window.fmtMoeda_n(split.despesasLogistica)}</strong>
                             </div>
                             <div style="text-align: right; font-size: 9px; color: #555; margin-bottom: 8px; line-height: 1.3;">
-                                ${roadieCusto > 0 ? `Roadie: ${window.fmtMoeda_n(roadieCusto)}<br>` : ''}
-                                ${totalGasolina > 0 ? `Gasolina: ${window.fmtMoeda_n(totalGasolina)}<br>` : ''}
-                                ${van > 0 ? `Van: ${window.fmtMoeda_n(van)}` : ''}
+                                ${split.roadieCusto > 0 ? `Roadie: ${window.fmtMoeda_n(split.roadieCusto)}<br>` : ''}
+                                ${split.totalGasolina > 0 ? `Gasolina: ${window.fmtMoeda_n(split.totalGasolina)}<br>` : ''}
+                                ${split.van > 0 ? `Van: ${window.fmtMoeda_n(split.van)}` : ''}
                             </div>
                             <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; font-weight: bold;">
                                 <span>Líquido Divisível</span>
-                                <span>${window.fmtMoeda_n(liquidoDivisivel)}</span>
+                                <span>${window.fmtMoeda_n(split.liquidoDivisivel)}</span>
                             </div>
                             <div style="text-align: right; font-size: 9px; margin-top: 8px;">
-                                FUNDO PRODUÇÃO: <strong>${window.fmtMoeda_n(fundoProducao)}</strong>
+                                MODO RATEIO: <strong>${split.modoRateio.toUpperCase()}</strong><br>${split.usarSemProducao ? `BASE POR INTEGRANTE: <strong>${window.fmtMoeda_n(split.baseRateio)}</strong>` : `FUNDO PRODUCAO: <strong>${window.fmtMoeda_n(split.fundoProducao)}</strong>`}
                             </div>
                         </div>
 
@@ -2823,12 +3414,12 @@
                             <div style="margin-bottom: 12px;">
                                 <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 2px;">
                                     <span>Luciano</span>
-                                    <span>${window.fmtMoeda_n(cacheLuciano)}</span>
+                                    <span>${window.fmtMoeda_n(split.caches.l)}</span>
                                 </div>
                                 <div style="font-size: 9px; color: #555; line-height: 1.3;">
-                                    Base: ${window.fmtMoeda(fundoProducao)}<br>
-                                    Prod: ${window.fmtMoeda(prodIndiv)}<br>
-                                    ${gasL > 0 ? `Gas: ${window.fmtMoeda(gasL)}` : ''}
+                                    Base: ${window.fmtMoeda(split.baseIntegrante)}<br>
+                                    ${split.usarSemProducao ? '' : `Prod: ${window.fmtMoeda(split.prodIndiv)}<br>`}
+                                    ${split.gasL > 0 ? `Gas: ${window.fmtMoeda(split.gasL)}` : ''}
                                 </div>
                             </div>
 
@@ -2836,12 +3427,12 @@
                             <div style="margin-bottom: 12px;">
                                 <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 2px;">
                                     <span>Serginho</span>
-                                    <span>${window.fmtMoeda_n(cacheSerginho)}</span>
+                                    <span>${window.fmtMoeda_n(split.caches.s)}</span>
                                 </div>
                                 <div style="font-size: 9px; color: #555; line-height: 1.3;">
-                                    Base: ${window.fmtMoeda(fundoProducao)}<br>
-                                    Prod: ${window.fmtMoeda(prodIndiv)}<br>
-                                    ${gasS > 0 ? `Gas: ${window.fmtMoeda(gasS)}` : ''}
+                                    Base: ${window.fmtMoeda(split.baseIntegrante)}<br>
+                                    ${split.usarSemProducao ? '' : `Prod: ${window.fmtMoeda(split.prodIndiv)}<br>`}
+                                    ${split.gasS > 0 ? `Gas: ${window.fmtMoeda(split.gasS)}` : ''}
                                 </div>
                             </div>
 
@@ -2849,12 +3440,12 @@
                             <div style="margin-bottom: 12px;">
                                 <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 2px;">
                                     <span>Cesimbra</span>
-                                    <span>${window.fmtMoeda_n(cacheCesimbra)}</span>
+                                    <span>${window.fmtMoeda_n(split.caches.c)}</span>
                                 </div>
                                 <div style="font-size: 9px; color: #555; line-height: 1.3;">
-                                    Base: ${window.fmtMoeda(fundoProducao)}<br>
-                                    ${roadieCusto > 0 ? `Roadie: ${window.fmtMoeda(roadieCusto)}<br>` : ''}
-                                    ${gasC > 0 ? `Gas: ${window.fmtMoeda(gasC)}` : ''}
+                                    Base: ${window.fmtMoeda(split.baseIntegrante)}<br>
+                                    ${split.roadieCusto > 0 ? `Roadie: ${window.fmtMoeda(split.roadieCusto)}<br>` : ''}
+                                    ${split.gasC > 0 ? `Gas: ${window.fmtMoeda(split.gasC)}` : ''}
                                 </div>
                             </div>
 
@@ -2862,11 +3453,11 @@
                             <div style="margin-bottom: 12px;">
                                 <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 2px;">
                                     <span>Levi</span>
-                                    <span>${window.fmtMoeda_n(cacheLevi)}</span>
+                                    <span>${window.fmtMoeda_n(split.caches.v)}</span>
                                 </div>
                                 <div style="font-size: 9px; color: #555; line-height: 1.3;">
-                                    Base: ${window.fmtMoeda(fundoProducao)}<br>
-                                    ${gasLevi > 0 ? `Gas: ${window.fmtMoeda(gasLevi)}` : ''}
+                                    Base: ${window.fmtMoeda(split.baseIntegrante)}<br>
+                                    ${split.gasLevi > 0 ? `Gas: ${window.fmtMoeda(split.gasLevi)}` : ''}
                                 </div>
                             </div>
 
@@ -3142,7 +3733,7 @@
             const tiposQtd = {};
             const vipMap = {};
             
-            window.dadosGlobais.forEach(ev => {
+            window.obterEventosPainelPrincipais().forEach(ev => {
                 if (ev.status !== 'CONFIRMADO') return;
                 
                 const d = window.extrairAnoMes(ev.dataStr);
@@ -3215,7 +3806,7 @@
         };
 
         window.abrirDetalhesCategoria = (tipo, mesIni, mesFim, ano) => {
-            const filtrados = window.dadosGlobais.filter(ev => {
+            const filtrados = window.obterEventosPainelPrincipais().filter(ev => {
                 if(ev.status !== 'CONFIRMADO') return false;
                 const d = window.extrairAnoMes(ev.dataStr);
                 if(d.ano !== ano) return false;
@@ -3271,7 +3862,7 @@
             
             let r = { faturamento: 0, lucro: 0, despesas: 0, producaoTotal: 0, impostos: 0, van: 0, roadie: 0, gasolina: {total:0}, caches: {l:0, s:0, c:0, v:0} };
             
-            window.dadosGlobais.forEach(ev => {
+            window.obterEventosPainelPrincipais().forEach(ev => {
                 const d = window.extrairAnoMes(ev.dataStr);
                 if (d.ano !== ano) return;
                 if (mes !== 'todos' && parseInt(d.mes) !== parseInt(mes)) return;
@@ -3354,6 +3945,1172 @@
             document.getElementById('fin-geral-content').innerHTML = html; 
         };
 
+        window.renderGraficoFinanceiroAtendimento = (resumoAtendimento = {}) => {
+            const canvas = document.getElementById('fin-atendimento-chart');
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+            if (window.finAtendimentoChart) window.finAtendimentoChart.destroy();
+
+            const labels = ['Luciano', 'Serginho'];
+            const valores = labels.map(nome => window.safeNum(resumoAtendimento[nome]?.total || 0));
+            const quantidades = labels.map(nome => window.safeNum(resumoAtendimento[nome]?.qtd || 0));
+            const maxQtd = Math.max(...quantidades, 1);
+
+            window.finAtendimentoChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            type: 'bar',
+                            label: 'Total confirmado',
+                            data: valores,
+                            backgroundColor: ['rgba(212, 175, 55, 0.86)', 'rgba(16, 185, 129, 0.82)'],
+                            borderColor: ['#d4af37', '#10b981'],
+                            borderWidth: 1.5,
+                            borderRadius: 12,
+                            borderSkipped: false,
+                            barThickness: 42
+                        },
+                        {
+                            type: 'line',
+                            label: 'Quantidade',
+                            data: quantidades,
+                            yAxisID: 'y1',
+                            borderColor: '#f8fafc',
+                            backgroundColor: '#f8fafc',
+                            pointBackgroundColor: ['#d4af37', '#10b981'],
+                            pointBorderColor: '#0f1115',
+                            pointBorderWidth: 2,
+                            pointRadius: 5,
+                            pointHoverRadius: 6,
+                            borderWidth: 2.5,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    color: '#9ca3af',
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#e5e7eb',
+                                font: { family: 'Montserrat', size: 10, weight: 'bold' },
+                                usePointStyle: true,
+                                boxWidth: 10
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#111318',
+                            titleColor: '#d4af37',
+                            bodyColor: '#f8fafc',
+                            borderColor: '#2a2e39',
+                            borderWidth: 1,
+                            padding: 12,
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    if (label === 'Quantidade') return `${label}: ${context.parsed.y} evento(s)`;
+                                    return `${label}: ${window.fmtMoeda_n(context.parsed.y)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                color: '#d1d5db',
+                                font: { family: 'Montserrat', size: 10, weight: 'bold' }
+                            },
+                            grid: { display: false }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#9ca3af',
+                                font: { size: 9 },
+                                callback: function(value) {
+                                    return new Intl.NumberFormat('pt-BR', {
+                                        style: 'currency',
+                                        currency: 'BRL',
+                                        notation: 'compact',
+                                        maximumFractionDigits: 1
+                                    }).format(value);
+                                }
+                            },
+                            grid: { color: 'rgba(42, 46, 57, 0.9)' }
+                        },
+                        y1: {
+                            position: 'right',
+                            beginAtZero: true,
+                            suggestedMax: maxQtd + 1,
+                            ticks: {
+                                stepSize: 1,
+                                color: '#cbd5e1',
+                                font: { size: 9 },
+                                callback: function(value) { return `${value}`; }
+                            },
+                            grid: { drawOnChartArea: false }
+                        }
+                    }
+                }
+            });
+        };
+
+        window.carregarFinanceiroGeral = () => {
+            const mes = document.getElementById('filtroMesFin').value;
+            const ano = document.getElementById('filtroAnoFin').value;
+
+            if (window.finAtendimentoChart) {
+                window.finAtendimentoChart.destroy();
+                window.finAtendimentoChart = null;
+            }
+
+            let r = { faturamento: 0, lucro: 0, despesas: 0, producaoTotal: 0, impostos: 0, van: 0, roadie: 0, gasolina: {total:0}, caches: {l:0, s:0, c:0, v:0} };
+            const resumoAtendimento = {
+                Luciano: { qtd: 0, total: 0 },
+                Serginho: { qtd: 0, total: 0 }
+            };
+
+            window.obterEventosPainelPrincipais().forEach(ev => {
+                const d = window.extrairAnoMes(ev.dataStr);
+                if (d.ano !== ano) return;
+                if (mes !== 'todos' && parseInt(d.mes) !== parseInt(mes)) return;
+
+                const atendimento = window.obterAtendimentoEvento(ev);
+                if (resumoAtendimento[atendimento]) {
+                    resumoAtendimento[atendimento].qtd += 1;
+                }
+
+                if (ev.status !== 'CONFIRMADO') return;
+
+                let valorTotal = ev.valorNum || 0;
+                const split = window.calcularSplitFechamentoBanda({
+                    valorTotal,
+                    opNf: ev.temNf,
+                    roadie: ev.roadie,
+                    gasL: ev.gasL,
+                    gasS: ev.gasS,
+                    gasC: ev.gasC,
+                    gasLevi: ev.gasLevi,
+                    van: ev.van,
+                    semProducao: ev.semProducao
+                });
+
+                if (resumoAtendimento[atendimento]) {
+                    resumoAtendimento[atendimento].total += valorTotal;
+                }
+
+                r.faturamento += valorTotal;
+                r.impostos += split.imposto;
+                r.van += split.van;
+                r.roadie += split.roadieCusto;
+                r.gasolina.total += split.totalGasolina;
+                r.despesas += split.despesasTotais;
+                r.lucro += split.liquidoDivisivel;
+                r.producaoTotal += split.fundoProducao;
+
+                r.caches.l += split.caches.l;
+                r.caches.s += split.caches.s;
+                r.caches.c += split.caches.c;
+                r.caches.v += split.caches.v;
+            });
+
+            const resumoTimeAtendimento = window.obterResumoAtendimentoFinanceiro(resumoAtendimento);
+            const qtdTotalConfirmados = resumoTimeAtendimento.totalQtd;
+            const totalConfirmadoAtendimento = resumoTimeAtendimento.totalValor;
+
+            const periodoFinanceiro = window.formatarPeriodoFinanceiroPorExtenso(mes, ano);
+
+            const html = `
+                <div class="bg-card p-5 mb-4 shadow-xl border border-[#2a2e39] rounded-xl relative overflow-hidden group">
+                    <div class="absolute inset-0 bg-gradient-to-br from-emerald-900/10 to-transparent"></div>
+                    <h4 class="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-4 border-b border-[#2a2e39] pb-2 relative z-10">Resultados do Periodo</h4>
+                    <div class="grid grid-cols-2 gap-4 text-center relative z-10">
+                        <div class="bg-[#111318] p-3 rounded-lg border border-[#2a2e39] shadow-inner transition hover:border-emerald-900/50">
+                            <span class="text-[9px] text-gray-400 block uppercase font-bold tracking-widest mb-1">Faturamento</span>
+                            <span class="text-lg font-black text-white">${window.fmtMoeda_n(r.faturamento)}</span>
+                        </div>
+                        <div class="bg-[#111318] p-3 rounded-lg border border-emerald-900/30 shadow-[0_0_15px_rgba(16,185,129,0.1)] transition hover:border-emerald-500">
+                            <span class="text-[9px] text-gray-400 block uppercase font-bold tracking-widest mb-1">Lucro Liquido</span>
+                            <span class="text-lg font-black text-emerald-400">${window.fmtMoeda_n(r.lucro)}</span>
+                        </div>
+                        <div class="bg-[#111318] p-3 rounded-lg border border-red-900/30 shadow-[0_0_15px_rgba(239,68,68,0.05)] transition hover:border-red-500">
+                            <span class="text-[9px] text-gray-400 block uppercase font-bold tracking-widest mb-1">Despesas T.</span>
+                            <span class="text-lg font-black text-red-400">${window.fmtMoeda_n(r.despesas)}</span>
+                        </div>
+                        <div class="bg-[#111318] p-3 rounded-lg border border-[#d4af37]/30 shadow-[0_0_15px_rgba(212,175,55,0.1)] transition hover:border-[#d4af37]">
+                            <span class="text-[9px] text-gray-400 block uppercase font-bold tracking-widest mb-1">Caixa (Prod.)</span>
+                            <span class="text-lg font-black text-[#d4af37]">${window.fmtMoeda_n(r.producaoTotal)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-card p-5 mb-4 shadow-xl border border-[#2a2e39] rounded-xl relative overflow-hidden">
+                    <div class="absolute inset-0 bg-gradient-to-br from-[#d4af37]/10 via-transparent to-emerald-500/10"></div>
+                    <div class="relative z-10">
+                        <div class="flex justify-between items-start gap-3 mb-4 border-b border-[#2a2e39] pb-3">
+                            <div>
+                                <h3 class="text-[10px] font-black text-[#d4af37] uppercase tracking-[0.22em]">Atendimentos Confirmados</h3>
+                                <p class="text-[10px] text-gray-500 mt-1">Total confirmados x quantidade total de atendimentos no periodo filtrado</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="block text-[9px] text-gray-500 uppercase font-black tracking-widest">Atendimentos</span>
+                                <span class="block text-sm font-black text-white">${qtdTotalConfirmados} evento(s)</span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,0.92fr)_minmax(320px,1.08fr)] gap-4">
+                            <div class="bg-[#111318] p-4 rounded-xl border border-[#2a2e39]">
+                                <div class="flex justify-between items-center gap-3 mb-4">
+                                    <div>
+                                        <span class="block text-[9px] text-gray-500 uppercase font-black tracking-widest">Grafico comparativo</span>
+                                        <span class="block text-xs font-bold text-white mt-1">TOTAL CONFIRMADOS X QTD ATENDIMENTOS</span>
+                                    </div>
+                                    <span class="text-[9px] uppercase font-black tracking-widest text-gray-500">${window.fmtMoeda_n(totalConfirmadoAtendimento)}</span>
+                                </div>
+                                <div class="h-[205px] sm:h-[225px]">
+                                    <canvas id="fin-atendimento-chart"></canvas>
+                                </div>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div class="bg-[#111318] p-4 rounded-xl border border-[#d4af37]/25 shadow-[0_0_18px_rgba(212,175,55,0.07)]">
+                                    <div class="flex justify-between items-start gap-3 mb-3">
+                                        <div>
+                                            <span class="block text-[10px] font-black text-[#f0d48a] uppercase tracking-[0.18em]">Luciano</span>
+                                            <span class="block text-[10px] text-gray-500 mt-1">Desempenho no periodo filtrado</span>
+                                        </div>
+                                        <span class="text-sm font-black text-[#f0d48a]">${window.formatarPercentualAtendimento(resumoTimeAtendimento.Luciano.percentualQtd)}</span>
+                                    </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                        <div class="bg-black/20 rounded-lg border border-white/5 px-3 py-3">
+                                            <span class="block text-[9px] text-gray-500 uppercase font-black tracking-widest mb-1">Numero de atendimentos</span>
+                                            <span class="block text-lg font-black text-white">${resumoTimeAtendimento.Luciano.qtd}</span>
+                                        </div>
+                                        <div class="bg-black/20 rounded-lg border border-white/5 px-3 py-3">
+                                            <span class="block text-[9px] text-gray-500 uppercase font-black tracking-widest mb-1">Total confirmados</span>
+                                            <span class="block text-sm font-black text-white">${window.fmtMoeda_n(resumoTimeAtendimento.Luciano.total)}</span>
+                                        </div>
+                                        <div class="bg-black/20 rounded-lg border border-white/5 px-3 py-3">
+                                            <span class="block text-[9px] text-gray-500 uppercase font-black tracking-widest mb-1">Percentual do total</span>
+                                            <span class="block text-lg font-black text-[#f0d48a]">${window.formatarPercentualAtendimento(resumoTimeAtendimento.Luciano.percentualQtd)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="bg-[#111318] p-4 rounded-xl border border-emerald-500/25 shadow-[0_0_18px_rgba(16,185,129,0.07)]">
+                                    <div class="flex justify-between items-start gap-3 mb-3">
+                                        <div>
+                                            <span class="block text-[10px] font-black text-emerald-400 uppercase tracking-[0.18em]">Serginho</span>
+                                            <span class="block text-[10px] text-gray-500 mt-1">Desempenho no periodo filtrado</span>
+                                        </div>
+                                        <span class="text-sm font-black text-emerald-400">${window.formatarPercentualAtendimento(resumoTimeAtendimento.Serginho.percentualQtd)}</span>
+                                    </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                        <div class="bg-black/20 rounded-lg border border-white/5 px-3 py-3">
+                                            <span class="block text-[9px] text-gray-500 uppercase font-black tracking-widest mb-1">Numero de atendimentos</span>
+                                            <span class="block text-lg font-black text-white">${resumoTimeAtendimento.Serginho.qtd}</span>
+                                        </div>
+                                        <div class="bg-black/20 rounded-lg border border-white/5 px-3 py-3">
+                                            <span class="block text-[9px] text-gray-500 uppercase font-black tracking-widest mb-1">Total confirmados</span>
+                                            <span class="block text-sm font-black text-white">${window.fmtMoeda_n(resumoTimeAtendimento.Serginho.total)}</span>
+                                        </div>
+                                        <div class="bg-black/20 rounded-lg border border-white/5 px-3 py-3">
+                                            <span class="block text-[9px] text-gray-500 uppercase font-black tracking-widest mb-1">Percentual do total</span>
+                                            <span class="block text-lg font-black text-emerald-400">${window.formatarPercentualAtendimento(resumoTimeAtendimento.Serginho.percentualQtd)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="bg-[#111318] p-4 rounded-xl border border-[#2a2e39]">
+                                    <span class="block text-[9px] text-gray-500 uppercase font-black tracking-widest mb-2">Periodo</span>
+                                    <p class="text-sm font-bold text-[#d4af37] leading-relaxed">${periodoFinanceiro}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-card p-5 space-y-2 mb-4 shadow-xl border border-[#2a2e39] rounded-xl">
+                    <h3 class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-4 border-b border-[#2a2e39] pb-2">Distribuicao Final</h3>
+                    <div class="flex justify-between items-center text-xs text-gray-300 border-b border-[#2a2e39] pb-2 pt-1 hover:bg-[#111318] px-2 rounded transition">
+                        <span class="font-bold uppercase tracking-wider text-[10px]">Luciano</span><span class="font-black text-[#d4af37]">${window.fmtMoeda_n(r.caches.l)}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-gray-300 border-b border-[#2a2e39] pb-2 pt-1 hover:bg-[#111318] px-2 rounded transition">
+                        <span class="font-bold uppercase tracking-wider text-[10px]">Serginho</span><span class="font-black text-[#d4af37]">${window.fmtMoeda_n(r.caches.s)}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-gray-300 border-b border-[#2a2e39] pb-2 pt-1 hover:bg-[#111318] px-2 rounded transition">
+                        <span class="font-bold uppercase tracking-wider text-[10px]">Cesimbra</span><span class="font-black text-white">${window.fmtMoeda_n(r.caches.c)}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-gray-300 pt-1 hover:bg-[#111318] px-2 rounded transition pb-2">
+                        <span class="font-bold uppercase tracking-wider text-[10px]">Levi</span><span class="font-black text-white">${window.fmtMoeda_n(r.caches.v)}</span>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('fin-geral-content').innerHTML = html;
+            window.renderGraficoFinanceiroAtendimento(resumoAtendimento);
+        };
+
+        window.coletarDadosPdfRelatorioFinanceiro = () => {
+            const mes = document.getElementById('filtroMesFin').value;
+            const ano = document.getElementById('filtroAnoFin').value;
+            const periodoTexto = mes === 'todos'
+                ? window.formatarPeriodoFinanceiroPorExtenso('todos', ano)
+                : window.formatarPeriodoFinanceiroPorExtenso(mes, ano);
+
+            const dados = {
+                mes,
+                ano,
+                periodoTexto,
+                resumo: { faturamento: 0, lucro: 0, despesas: 0, producaoTotal: 0, impostos: 0, van: 0, roadie: 0, gasolina: { total: 0 }, caches: { l: 0, s: 0, c: 0, v: 0 } },
+                atendimento: {
+                    Luciano: { qtd: 0, total: 0 },
+                    Serginho: { qtd: 0, total: 0 }
+                },
+                distribuicao: {
+                    Luciano: { total: 0, aReceber: 0 },
+                    Serginho: { total: 0, aReceber: 0 },
+                    Cesimbra: { total: 0, aReceber: 0 },
+                    Levi: { total: 0, aReceber: 0 }
+                },
+                discriminado: [],
+                recebiveis: [],
+                totaisRecebiveis: { previsto: 0, recebido: 0, falta: 0 }
+            };
+
+            window.obterEventosPainelPrincipais().forEach(ev => {
+                const d = window.extrairAnoMes(ev.dataStr);
+                if (d.ano !== ano) return;
+                if (mes !== 'todos' && parseInt(d.mes) !== parseInt(mes)) return;
+
+                const atendimento = window.obterAtendimentoEvento(ev);
+                if (dados.atendimento[atendimento]) {
+                    dados.atendimento[atendimento].qtd += 1;
+                }
+
+                if (ev.status !== 'CONFIRMADO') return;
+
+                const valorTotal = window.safeNum(ev.valorNum || ev.valor || 0);
+                const valorPago = window.safeNum(ev.valorPagoNum ?? ev.valorPago ?? 0);
+                const falta = Math.max(0, valorTotal - valorPago);
+                const faltaRatio = valorTotal > 0 ? Math.min(falta / valorTotal, 1) : 0;
+                const split = window.calcularSplitFechamentoBanda({
+                    valorTotal,
+                    opNf: ev.temNf,
+                    roadie: ev.roadie,
+                    gasL: ev.gasL,
+                    gasS: ev.gasS,
+                    gasC: ev.gasC,
+                    gasLevi: ev.gasLevi,
+                    van: ev.van,
+                    semProducao: ev.semProducao
+                });
+
+                if (dados.atendimento[atendimento]) {
+                    dados.atendimento[atendimento].total += valorTotal;
+                }
+
+                dados.resumo.faturamento += valorTotal;
+                dados.resumo.impostos += split.imposto;
+                dados.resumo.van += split.van;
+                dados.resumo.roadie += split.roadieCusto;
+                dados.resumo.gasolina.total += split.totalGasolina;
+                dados.resumo.despesas += split.despesasTotais;
+                dados.resumo.lucro += split.liquidoDivisivel;
+                dados.resumo.producaoTotal += split.fundoProducao;
+
+                dados.resumo.caches.l += split.caches.l;
+                dados.resumo.caches.s += split.caches.s;
+                dados.resumo.caches.c += split.caches.c;
+                dados.resumo.caches.v += split.caches.v;
+
+                dados.distribuicao.Luciano.total += split.caches.l;
+                dados.distribuicao.Serginho.total += split.caches.s;
+                dados.distribuicao.Cesimbra.total += split.caches.c;
+                dados.distribuicao.Levi.total += split.caches.v;
+
+                dados.discriminado.push({
+                    cliente: ev.cliente || 'Cliente',
+                    dataStr: ev.dataStr || '',
+                    cidade: ev.cidade || '',
+                    tipo: ev.tipo || '',
+                    atendimento,
+                    total: valorTotal,
+                    recebido: valorPago,
+                    falta,
+                    roadieValor: split.roadieCusto,
+                    van: split.van,
+                    modoRateio: split.modoRateio,
+                    producao: split.fundoProducao,
+                    distribuicao: {
+                        Luciano: { total: split.caches.l, aReceber: split.caches.l * faltaRatio },
+                        Serginho: { total: split.caches.s, aReceber: split.caches.s * faltaRatio },
+                        Cesimbra: { total: split.caches.c, aReceber: split.caches.c * faltaRatio },
+                        Levi: { total: split.caches.v, aReceber: split.caches.v * faltaRatio }
+                    }
+                });
+
+                if (faltaRatio > 0) {
+                    dados.distribuicao.Luciano.aReceber += split.caches.l * faltaRatio;
+                    dados.distribuicao.Serginho.aReceber += split.caches.s * faltaRatio;
+                    dados.distribuicao.Cesimbra.aReceber += split.caches.c * faltaRatio;
+                    dados.distribuicao.Levi.aReceber += split.caches.v * faltaRatio;
+
+                    dados.recebiveis.push({
+                        cliente: ev.cliente || 'Cliente',
+                        dataStr: ev.dataStr || '',
+                        cidade: ev.cidade || '',
+                        total: valorTotal,
+                        recebido: valorPago,
+                        falta,
+                        atendimento
+                    });
+
+                    dados.totaisRecebiveis.previsto += valorTotal;
+                    dados.totaisRecebiveis.recebido += valorPago;
+                    dados.totaisRecebiveis.falta += falta;
+                }
+            });
+
+            return dados;
+        };
+
+        window.montarHtmlPdfRelatorioFinanceiro = (dados, config = {}) => {
+            const partes = Array.isArray(config.partes) ? config.partes : [];
+            const incluirDiscriminado = partes.includes('discriminado');
+            const chartDataUrl = config.chartDataUrl || '';
+            const logoHtml = config.logoHtml || '<div style="font-size: 16px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; color: #111827;">Jazz Cinnamon</div>';
+            const dataGeracao = new Date().toLocaleString('pt-BR');
+            const resumoAtendimentoPdf = window.obterResumoAtendimentoFinanceiro(dados.atendimento);
+
+            const secaoTitulo = (titulo, subtitulo = '') => `
+                <div style="margin: 28px 0 16px 0;">
+                    <div style="font-size: 11px; font-weight: 900; letter-spacing: 0.24em; text-transform: uppercase; color: #8b5e00; margin-bottom: 6px;">${titulo}</div>
+                    ${subtitulo ? `<div style="font-size: 11px; color: #6b7280;">${subtitulo}</div>` : ''}
+                </div>
+            `;
+
+            const cardMetrica = (label, valor, cor = '#111827') => `
+                <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 16px; padding: 16px;">
+                    <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.18em; color: #6b7280; margin-bottom: 8px;">${label}</div>
+                    <div style="font-size: 22px; font-weight: 900; color: ${cor}; line-height: 1.2;">${valor}</div>
+                </div>
+            `;
+
+            const linhaDistribuicao = (nome, item) => `
+                <div style="display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                    <div style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #111827;">${nome}</div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 14px; font-weight: 900; color: #111827;">
+                            ${window.fmtMoeda_n(item.total)}
+                            ${incluirDiscriminado ? `<span style="font-size: 11px; font-weight: 700; color: #b91c1c;"> (a receber ${window.fmtMoeda_n(item.aReceber)})</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+            const cardInfoDiscriminado = (label, valor) => `
+                <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px;">
+                    <div style="font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.16em; color: #6b7280; margin-bottom: 6px;">${label}</div>
+                    <div style="font-size: 12px; font-weight: 800; color: #111827; line-height: 1.4;">${valor}</div>
+                </div>
+            `;
+
+            const htmlPartes = [];
+
+            if (partes.includes('resumo')) {
+                htmlPartes.push(`
+                    ${secaoTitulo('Resultados do Periodo', `${dados.periodoTexto} • Visao financeira consolidada`)}
+                    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+                        ${cardMetrica('Faturamento', window.fmtMoeda_n(dados.resumo.faturamento))}
+                        ${cardMetrica('Lucro Liquido', window.fmtMoeda_n(dados.resumo.lucro), '#047857')}
+                        ${cardMetrica('Despesas', window.fmtMoeda_n(dados.resumo.despesas), '#b91c1c')}
+                        ${cardMetrica('Caixa (Prod.)', window.fmtMoeda_n(dados.resumo.producaoTotal), '#8b5e00')}
+                    </div>
+                `);
+            }
+
+            if (partes.includes('atendimento')) {
+                htmlPartes.push(`
+                    ${secaoTitulo('Atendimentos Confirmados', 'Comparativo entre Luciano e Serginho')}
+                    <div style="display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(280px, 1.1fr); gap: 16px; align-items: start;">
+                        <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 18px; padding: 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px;">
+                                <div>
+                                    <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.18em; color: #6b7280;">Grafico comparativo</div>
+                                    <div style="font-size: 12px; color: #111827; font-weight: 700; margin-top: 4px;">Valor confirmado x quantidade</div>
+                                </div>
+                                <div style="font-size: 11px; font-weight: 900; color: #8b5e00;">${window.fmtMoeda_n(resumoAtendimentoPdf.totalValor)}</div>
+                            </div>
+                            ${chartDataUrl ? `<img src="${chartDataUrl}" style="width: 100%; display: block; border-radius: 12px; max-height: 240px; object-fit: contain;">` : '<div style="height: 220px; border-radius: 12px; background: #f8fafc; border: 1px dashed #d1d5db; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 12px; font-weight: 700;">Grafico indisponivel</div>'}
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr; gap: 14px;">
+                            <div style="background: #fffaf0; border: 1px solid #f0d48a; border-radius: 18px; padding: 16px;">
+                                <div style="display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 12px;">
+                                    <div>
+                                        <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.16em; color: #8b5e00;">Luciano</div>
+                                        <div style="font-size: 11px; color: #6b7280; margin-top: 4px;">Resumo individual de atendimentos</div>
+                                    </div>
+                                    <div style="font-size: 18px; font-weight: 900; color: #8b5e00;">${window.formatarPercentualAtendimento(resumoAtendimentoPdf.Luciano.percentualQtd)}</div>
+                                </div>
+                                <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;">
+                                    ${cardInfoDiscriminado('Numero de atendimentos', `${resumoAtendimentoPdf.Luciano.qtd}`)}
+                                    ${cardInfoDiscriminado('Total confirmados', window.fmtMoeda_n(resumoAtendimentoPdf.Luciano.total))}
+                                    ${cardInfoDiscriminado('Percentual de atendimentos totais', window.formatarPercentualAtendimento(resumoAtendimentoPdf.Luciano.percentualQtd))}
+                                </div>
+                            </div>
+                            <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 18px; padding: 16px;">
+                                <div style="display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 12px;">
+                                    <div>
+                                        <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.16em; color: #047857;">Serginho</div>
+                                        <div style="font-size: 11px; color: #6b7280; margin-top: 4px;">Resumo individual de atendimentos</div>
+                                    </div>
+                                    <div style="font-size: 18px; font-weight: 900; color: #047857;">${window.formatarPercentualAtendimento(resumoAtendimentoPdf.Serginho.percentualQtd)}</div>
+                                </div>
+                                <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;">
+                                    ${cardInfoDiscriminado('Numero de atendimentos', `${resumoAtendimentoPdf.Serginho.qtd}`)}
+                                    ${cardInfoDiscriminado('Total confirmados', window.fmtMoeda_n(resumoAtendimentoPdf.Serginho.total))}
+                                    ${cardInfoDiscriminado('Percentual de atendimentos totais', window.formatarPercentualAtendimento(resumoAtendimentoPdf.Serginho.percentualQtd))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `);
+            }
+
+            if (partes.includes('distribuicao')) {
+                htmlPartes.push(`
+                    ${secaoTitulo('Distribuicao Final', incluirDiscriminado ? 'Valores totais por integrante com destaque do que ainda esta em aberto' : 'Valores totais por integrante no periodo')}
+                    <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 18px; padding: 8px 18px;">
+                        ${linhaDistribuicao('Luciano', dados.distribuicao.Luciano)}
+                        ${linhaDistribuicao('Serginho', dados.distribuicao.Serginho)}
+                        ${linhaDistribuicao('Cesimbra', dados.distribuicao.Cesimbra)}
+                        <div style="display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 12px 0 4px 0;">
+                            <div style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #111827;">Levi</div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 14px; font-weight: 900; color: #111827;">
+                                    ${window.fmtMoeda_n(dados.distribuicao.Levi.total)}
+                                    ${incluirDiscriminado ? `<span style="font-size: 11px; font-weight: 700; color: #b91c1c;"> (a receber ${window.fmtMoeda_n(dados.distribuicao.Levi.aReceber)})</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `);
+            }
+
+            if (partes.includes('discriminado')) {
+                const cardsDiscriminado = dados.discriminado.length
+                    ? dados.discriminado.map(item => `
+                        <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 18px; padding: 18px; margin-bottom: 16px; break-inside: avoid;">
+                            <div style="display: flex; justify-content: space-between; gap: 14px; align-items: start; margin-bottom: 14px;">
+                                <div>
+                                    <div style="font-size: 15px; font-weight: 900; color: #111827; text-transform: uppercase;">${window.escapeHtml(item.cliente)}</div>
+                                    <div style="font-size: 11px; color: #6b7280; margin-top: 6px;">${window.escapeHtml(window.formatarDataExibicao(item.dataStr))}${item.tipo ? ` - ${window.escapeHtml(item.tipo)}` : ''}${item.cidade ? ` - ${window.escapeHtml(item.cidade)}` : ''}</div>
+                                    <div style="font-size: 10px; color: #8b5e00; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; margin-top: 8px;">${window.escapeHtml(item.atendimento)}</div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.16em; color: #6b7280;">Valor do evento</div>
+                                    <div style="font-size: 18px; font-weight: 900; color: #111827; margin-top: 6px;">${window.fmtMoeda_n(item.total)}</div>
+                                    ${item.falta > 0 ? `<div style="font-size: 11px; font-weight: 800; color: #b91c1c; margin-top: 6px;">A receber ${window.fmtMoeda_n(item.falta)}</div>` : `<div style="font-size: 11px; font-weight: 800; color: #047857; margin-top: 6px;">Quitado</div>`}
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px;">
+                                ${cardInfoDiscriminado('Roadie', item.roadieValor > 0 ? `Sim - ${window.fmtMoeda_n(item.roadieValor)}` : 'Nao')}
+                                ${cardInfoDiscriminado('Van', item.van > 0 ? window.fmtMoeda_n(item.van) : 'Nao')}
+                                ${cardInfoDiscriminado('Valor producao', window.fmtMoeda_n(item.producao))}
+                                ${cardInfoDiscriminado('Recebido', window.fmtMoeda_n(item.recebido))}
+                            </div>
+                            <div style="border-top: 1px solid #e5e7eb; padding-top: 14px;">
+                                <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.18em; color: #6b7280; margin-bottom: 10px;">Distribuicao por integrante</div>
+                                <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;">
+                                    ${cardInfoDiscriminado('Luciano', `${window.fmtMoeda_n(item.distribuicao.Luciano.total)}${item.distribuicao.Luciano.aReceber > 0 ? ` <span style="color: #b91c1c;">(a receber ${window.fmtMoeda_n(item.distribuicao.Luciano.aReceber)})</span>` : ''}`)}
+                                    ${cardInfoDiscriminado('Serginho', `${window.fmtMoeda_n(item.distribuicao.Serginho.total)}${item.distribuicao.Serginho.aReceber > 0 ? ` <span style="color: #b91c1c;">(a receber ${window.fmtMoeda_n(item.distribuicao.Serginho.aReceber)})</span>` : ''}`)}
+                                    ${cardInfoDiscriminado('Cesimbra', `${window.fmtMoeda_n(item.distribuicao.Cesimbra.total)}${item.distribuicao.Cesimbra.aReceber > 0 ? ` <span style="color: #b91c1c;">(a receber ${window.fmtMoeda_n(item.distribuicao.Cesimbra.aReceber)})</span>` : ''}`)}
+                                    ${cardInfoDiscriminado('Levi', `${window.fmtMoeda_n(item.distribuicao.Levi.total)}${item.distribuicao.Levi.aReceber > 0 ? ` <span style="color: #b91c1c;">(a receber ${window.fmtMoeda_n(item.distribuicao.Levi.aReceber)})</span>` : ''}`)}
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')
+                    : `<div style="padding: 18px 12px; text-align: center; color: #6b7280; border: 1px dashed #d1d5db; border-radius: 16px;">Nenhum evento confirmado no periodo.</div>`;
+                htmlPartes.push(`
+                    ${secaoTitulo('Relatorio Discriminado', 'Evento, custos principais, valor de producao e distribuicao detalhada')}
+                    ${cardsDiscriminado}
+                `);
+            }
+
+            return `
+                <div style="width: 794px; box-sizing: border-box; padding: 36px 34px; background: #ffffff; color: #111827; font-family: 'Montserrat', Arial, sans-serif;">
+                    <div style="border-bottom: 2px solid #111827; padding-bottom: 20px; margin-bottom: 12px;">
+                        <div style="display: flex; align-items: center; gap: 18px;">
+                            <div style="flex: 0 0 auto; display: flex; align-items: center; justify-content: center; min-height: 54px;">${logoHtml}</div>
+                            <div style="min-width: 0;">
+                        <div style="font-size: 11px; font-weight: 900; letter-spacing: 0.28em; text-transform: uppercase; color: #8b5e00;">Jazz Cinnamon ERP</div>
+                        <div style="font-size: 30px; font-weight: 900; color: #111827; margin-top: 10px;">Relatorio Financeiro</div>
+                        <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">${dados.periodoTexto} • Gerado em ${dataGeracao}</div>
+                            </div>
+                        </div>
+                    </div>
+                    ${htmlPartes.join('')}
+                </div>
+            `;
+        };
+
+        window.gerarPdfRelatorioFinanceiro = async (partesSelecionadas = []) => {
+            if (!Array.isArray(partesSelecionadas) || !partesSelecionadas.length) return;
+            if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('Biblioteca de PDF indisponivel.');
+
+            Swal.fire({
+                title: 'Gerando PDF...',
+                html: 'Montando o relatorio financeiro.',
+                didOpen: () => Swal.showLoading(),
+                background: '#1a1d24',
+                color: '#fff',
+                allowOutsideClick: false
+            });
+
+            try {
+                const partesSet = new Set(partesSelecionadas);
+                if (partesSet.has('discriminado')) partesSet.add('distribuicao');
+                const partesOrdenadas = ['resumo', 'atendimento', 'distribuicao', 'discriminado'].filter(parte => partesSet.has(parte));
+
+                const dados = window.coletarDadosPdfRelatorioFinanceiro();
+                const chartCanvas = partesOrdenadas.includes('atendimento') ? document.getElementById('fin-atendimento-chart') : null;
+                const chartDataUrl = chartCanvas ? chartCanvas.toDataURL('image/png', 1.0) : '';
+                const logoHtml = await window.obterLogosCabecalhoFinanceiroHtml();
+                const html = window.montarHtmlPdfRelatorioFinanceiro(dados, { partes: partesOrdenadas, chartDataUrl, logoHtml });
+
+                const pdfContainer = document.createElement('div');
+                pdfContainer.id = 'pdf-relatorio-financeiro-temp';
+                pdfContainer.style.position = 'fixed';
+                pdfContainer.style.left = '-10000px';
+                pdfContainer.style.top = '0';
+                pdfContainer.style.width = '794px';
+                pdfContainer.style.background = '#ffffff';
+                pdfContainer.style.zIndex = '-1';
+                pdfContainer.innerHTML = html;
+                document.body.appendChild(pdfContainer);
+
+                const imagens = [...pdfContainer.querySelectorAll('img')];
+                await Promise.all(imagens.map((img) => {
+                    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+                    return new Promise((resolve) => {
+                        let finalizado = false;
+                        const concluir = () => {
+                            if (finalizado) return;
+                            finalizado = true;
+                            resolve();
+                        };
+                        img.addEventListener('load', concluir, { once: true });
+                        img.addEventListener('error', concluir, { once: true });
+                        setTimeout(concluir, 1800);
+                    });
+                }));
+                await new Promise(resolve => setTimeout(resolve, 150));
+
+                const canvas = await html2canvas(pdfContainer, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    logging: false,
+                    windowWidth: 860
+                });
+
+                if (pdfContainer.parentNode) document.body.removeChild(pdfContainer);
+
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pageWidth = pdf.internal.pageSize.getWidth();
+                const pageHeight = pdf.internal.pageSize.getHeight();
+                const margin = 8;
+                const imgWidth = pageWidth - (margin * 2);
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                const pageUsableHeight = pageHeight - (margin * 2);
+                const imgData = canvas.toDataURL('image/jpeg', 0.96);
+
+                let heightLeft = imgHeight;
+                let position = margin;
+
+                pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+                heightLeft -= pageUsableHeight;
+
+                while (heightLeft > 0) {
+                    position = margin - (imgHeight - heightLeft);
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+                    heightLeft -= pageUsableHeight;
+                }
+
+                const nomeArquivo = `Relatorio Financeiro - ${dados.periodoTexto.replace(/\s+/g, ' ').trim()}.pdf`;
+                pdf.save(nomeArquivo);
+                Swal.close();
+            } catch (error) {
+                const pdfContainerExistente = document.getElementById('pdf-relatorio-financeiro-temp');
+                if (pdfContainerExistente) pdfContainerExistente.remove();
+                console.error(error);
+                Swal.fire('Erro', error.message || 'Nao foi possivel gerar o PDF do relatorio.', 'error');
+            }
+        };
+
+        window.abrirModalPdfRelatorioFinanceiro = async () => {
+            const html = `
+                <div class="text-left space-y-3">
+                    <p class="text-[11px] text-gray-400">Escolha as partes que devem entrar no PDF.</p>
+                    <label class="flex items-center gap-3 bg-[#111318] border border-[#2a2e39] rounded-lg px-3 py-3">
+                        <input type="checkbox" class="pdf-relatorio-parte accent-[#d4af37]" value="resumo" checked>
+                        <span class="text-xs font-bold text-white uppercase tracking-wider">Resultados do periodo</span>
+                    </label>
+                    <label class="flex items-center gap-3 bg-[#111318] border border-[#2a2e39] rounded-lg px-3 py-3">
+                        <input type="checkbox" class="pdf-relatorio-parte accent-[#d4af37]" value="atendimento" checked>
+                        <span class="text-xs font-bold text-white uppercase tracking-wider">Atendimentos confirmados</span>
+                    </label>
+                    <label class="flex items-center gap-3 bg-[#111318] border border-[#2a2e39] rounded-lg px-3 py-3">
+                        <input type="checkbox" class="pdf-relatorio-parte accent-[#d4af37]" value="distribuicao" checked>
+                        <span class="text-xs font-bold text-white uppercase tracking-wider">Distribuicao final</span>
+                    </label>
+                    <label class="flex items-center gap-3 bg-[#111318] border border-[#2a2e39] rounded-lg px-3 py-3">
+                        <input type="checkbox" class="pdf-relatorio-parte accent-[#d4af37]" value="discriminado">
+                        <span class="text-xs font-bold text-white uppercase tracking-wider">Relatorio Discriminado</span>
+                    </label>
+                    <p class="text-[10px] text-gray-500">Se voce marcar relatorio discriminado, a distribuicao final vai destacar tambem o valor de cada integrante em aberto.</p>
+                </div>
+            `;
+
+            const modal = await Swal.fire({
+                title: '<span class="text-sm uppercase tracking-widest">Gerar PDF do Relatorio</span>',
+                html,
+                background: '#1a1d24',
+                color: '#fff',
+                confirmButtonText: 'Gerar PDF',
+                confirmButtonColor: '#d4af37',
+                showCancelButton: true,
+                cancelButtonText: 'Cancelar',
+                cancelButtonColor: '#3f3f46',
+                preConfirm: () => {
+                    const partes = [...document.querySelectorAll('.pdf-relatorio-parte:checked')].map(el => el.value);
+                    if (!partes.length) {
+                        Swal.showValidationMessage('Selecione pelo menos uma parte do relatorio.');
+                        return false;
+                    }
+                    return { partes };
+                }
+            });
+
+            if (!modal.isConfirmed || !modal.value?.partes?.length) return;
+            await window.gerarPdfRelatorioFinanceiro(modal.value.partes);
+        };
+
+        window.renderGraficoFinanceiroAtendimento = (resumoAtendimento = {}) => {
+            const canvas = document.getElementById('fin-atendimento-chart');
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+            if (window.finAtendimentoChart) window.finAtendimentoChart.destroy();
+
+            const resumo = window.obterResumoAtendimentoFinanceiro(resumoAtendimento);
+            const possuiDados = resumo.totalQtd > 0;
+            const labels = possuiDados ? ['Luciano', 'Serginho'] : ['Sem dados'];
+            const quantidades = possuiDados ? [resumo.Luciano.qtd, resumo.Serginho.qtd] : [1];
+            const totais = possuiDados ? [resumo.Luciano.total, resumo.Serginho.total] : [0];
+            const cores = possuiDados ? ['#d4af37', '#10b981'] : ['#374151'];
+            const fundos = possuiDados ? ['rgba(212, 175, 55, 0.92)', 'rgba(16, 185, 129, 0.88)'] : ['rgba(75, 85, 99, 0.92)'];
+
+            window.finAtendimentoChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Atendimentos confirmados',
+                        data: quantidades,
+                        backgroundColor: fundos,
+                        borderColor: cores,
+                        borderWidth: 3,
+                        hoverOffset: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: 8 },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#ffffff',
+                                font: { family: 'Montserrat', size: 11, weight: 'bold' },
+                                padding: 18,
+                                usePointStyle: true,
+                                generateLabels(chart) {
+                                    const dataset = chart.data.datasets[0];
+                                    return chart.data.labels.map((label, index) => ({
+                                        text: possuiDados ? `${label}: ${quantidades[index]} atendimento(s)` : label,
+                                        fillStyle: dataset.backgroundColor[index],
+                                        strokeStyle: dataset.borderColor[index],
+                                        lineWidth: 0,
+                                        hidden: false,
+                                        index,
+                                        pointStyle: 'circle',
+                                        color: '#ffffff',
+                                        fontColor: '#ffffff'
+                                    }));
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#111318',
+                            titleColor: '#d4af37',
+                            bodyColor: '#f8fafc',
+                            borderColor: '#2a2e39',
+                            borderWidth: 1,
+                            padding: 12,
+                            callbacks: {
+                                label(context) {
+                                    if (!possuiDados) return 'Nenhum atendimento confirmado no periodo.';
+                                    const index = context.dataIndex;
+                                    const nome = context.label || labels[index] || 'Atendimento';
+                                    const qtd = quantidades[index];
+                                    const percentual = resumo.totalQtd > 0 ? (qtd / resumo.totalQtd) * 100 : 0;
+                                    return [
+                                        `${nome}: ${qtd} atendimento(s)`,
+                                        `Total confirmado: ${window.fmtMoeda_n(totais[index])}`,
+                                        `Participacao: ${window.formatarPercentualAtendimento(percentual)}`
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        };
+
+        window.esperarImagensPdfRelatorioFinanceiro = async (elemento) => {
+            const imagens = [...elemento.querySelectorAll('img')];
+            await Promise.all(imagens.map((img) => {
+                if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+                return new Promise((resolve) => {
+                    let finalizado = false;
+                    const concluir = () => {
+                        if (finalizado) return;
+                        finalizado = true;
+                        resolve();
+                    };
+                    img.addEventListener('load', concluir, { once: true });
+                    img.addEventListener('error', concluir, { once: true });
+                    setTimeout(concluir, 1800);
+                });
+            }));
+        };
+
+        window.renderizarBlocoPdfRelatorioFinanceiro = async (html) => {
+            const container = document.createElement('div');
+            container.className = 'pdf-relatorio-financeiro-render';
+            container.style.position = 'fixed';
+            container.style.left = '-10000px';
+            container.style.top = '0';
+            container.style.width = '794px';
+            container.style.background = '#ffffff';
+            container.style.zIndex = '-1';
+            container.innerHTML = html;
+            document.body.appendChild(container);
+
+            try {
+                await window.esperarImagensPdfRelatorioFinanceiro(container);
+                await new Promise(resolve => setTimeout(resolve, 80));
+                return await html2canvas(container, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    logging: false,
+                    windowWidth: 860
+                });
+            } finally {
+                if (container.parentNode) container.parentNode.removeChild(container);
+            }
+        };
+
+        window.adicionarCanvasAoPdfRelatorioFinanceiro = (pdf, canvas, estado = {}) => {
+            const margem = estado.margem ?? 10;
+            const espaco = estado.espaco ?? 4;
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const larguraUtil = pageWidth - (margem * 2);
+            const alturaUtil = pageHeight - (margem * 2);
+            const pxPorMm = canvas.width / larguraUtil;
+            const alturaBlocoMm = canvas.height / pxPorMm;
+
+            if (alturaBlocoMm <= alturaUtil) {
+                if (!estado.primeiroBloco && (estado.cursorY + alturaBlocoMm > pageHeight - margem)) {
+                    pdf.addPage();
+                    estado.cursorY = margem;
+                }
+                pdf.addImage(canvas.toDataURL('image/jpeg', 0.96), 'JPEG', margem, estado.cursorY, larguraUtil, alturaBlocoMm);
+                estado.cursorY += alturaBlocoMm + espaco;
+                estado.primeiroBloco = false;
+                return estado;
+            }
+
+            if (!estado.primeiroBloco && estado.cursorY > margem) {
+                pdf.addPage();
+                estado.cursorY = margem;
+            }
+
+            const alturaMaximaPx = Math.floor(alturaUtil * pxPorMm);
+            let offsetY = 0;
+
+            while (offsetY < canvas.height) {
+                const alturaFatiaPx = Math.min(alturaMaximaPx, canvas.height - offsetY);
+                const fatiaCanvas = document.createElement('canvas');
+                fatiaCanvas.width = canvas.width;
+                fatiaCanvas.height = alturaFatiaPx;
+                const fatiaCtx = fatiaCanvas.getContext('2d');
+                fatiaCtx.drawImage(canvas, 0, offsetY, canvas.width, alturaFatiaPx, 0, 0, canvas.width, alturaFatiaPx);
+
+                const alturaFatiaMm = alturaFatiaPx / pxPorMm;
+                pdf.addImage(fatiaCanvas.toDataURL('image/jpeg', 0.96), 'JPEG', margem, estado.cursorY, larguraUtil, alturaFatiaMm);
+                offsetY += alturaFatiaPx;
+                estado.primeiroBloco = false;
+
+                if (offsetY < canvas.height) {
+                    pdf.addPage();
+                    estado.cursorY = margem;
+                } else {
+                    estado.cursorY += alturaFatiaMm + espaco;
+                }
+            }
+
+            return estado;
+        };
+
+        window.montarHtmlPdfRelatorioFinanceiro = (dados, config = {}) => {
+            const partes = Array.isArray(config.partes) ? config.partes : [];
+            const incluirDiscriminado = partes.includes('discriminado');
+            const chartDataUrl = config.chartDataUrl || '';
+            const logoHtml = config.logoHtml || '<div style="font-size: 16px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; color: #111827;">Jazz Cinnamon</div>';
+            const dataGeracao = new Date().toLocaleString('pt-BR');
+            const resumoAtendimentoPdf = window.obterResumoAtendimentoFinanceiro(dados.atendimento);
+
+            const embrulharBloco = (conteudo) => `
+                <div style="width: 794px; box-sizing: border-box; padding: 0 34px 18px 34px; background: #ffffff; color: #111827; font-family: 'Montserrat', Arial, sans-serif;">
+                    ${conteudo}
+                </div>
+            `;
+            const cabecalhoSecao = (titulo, subtitulo = '') => `
+                <div style="margin: 0 0 14px 0;">
+                    <div style="font-size: 11px; font-weight: 900; letter-spacing: 0.24em; text-transform: uppercase; color: #8b5e00; margin-bottom: 6px;">${titulo}</div>
+                    ${subtitulo ? `<div style="font-size: 11px; color: #6b7280;">${subtitulo}</div>` : ''}
+                </div>
+            `;
+            const cardMetrica = (label, valor, cor = '#111827') => `
+                <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 16px; padding: 16px;">
+                    <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.18em; color: #6b7280; margin-bottom: 8px;">${label}</div>
+                    <div style="font-size: 22px; font-weight: 900; color: ${cor}; line-height: 1.2;">${valor}</div>
+                </div>
+            `;
+            const cardInfo = (label, valor) => `
+                <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px;">
+                    <div style="font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.16em; color: #6b7280; margin-bottom: 6px;">${label}</div>
+                    <div style="font-size: 12px; font-weight: 800; color: #111827; line-height: 1.45;">${valor}</div>
+                </div>
+            `;
+            const linhaDistribuicao = (nome, item) => `
+                <div style="display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                    <div style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #111827;">${nome}</div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 14px; font-weight: 900; color: #111827;">
+                            ${window.fmtMoeda_n(item.total)}
+                            ${incluirDiscriminado ? `<span style="font-size: 11px; font-weight: 700; color: #b91c1c;"> (a receber ${window.fmtMoeda_n(item.aReceber)})</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+            const cardPessoa = (nome, corPrincipal, fundo, borda, item) => `
+                <div style="background: ${fundo}; border: 1px solid ${borda}; border-radius: 18px; padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 12px;">
+                        <div>
+                            <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.16em; color: ${corPrincipal};">${nome}</div>
+                            <div style="font-size: 11px; color: #6b7280; margin-top: 4px;">Resumo individual de atendimentos</div>
+                        </div>
+                        <div style="font-size: 18px; font-weight: 900; color: ${corPrincipal};">${window.formatarPercentualAtendimento(item.percentualQtd)}</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;">
+                        ${cardInfo('Numero de atendimentos', `${item.qtd}`)}
+                        ${cardInfo('Total confirmados', window.fmtMoeda_n(item.total))}
+                        ${cardInfo('Percentual de atendimentos totais', window.formatarPercentualAtendimento(item.percentualQtd))}
+                    </div>
+                </div>
+            `;
+
+            const blocos = [];
+            const headerHtml = `
+                <div style="width: 794px; box-sizing: border-box; padding: 24px 34px 22px 34px; background: #ffffff; color: #111827; font-family: 'Montserrat', Arial, sans-serif; text-align: center;">
+                    <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 18px;">${logoHtml}</div>
+                    <div style="font-size: 30px; font-weight: 900; color: #111827;">Relatorio Financeiro</div>
+                    <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">${dados.periodoTexto} - Gerado em ${dataGeracao}</div>
+                </div>
+            `;
+
+            if (partes.includes('resumo')) {
+                blocos.push({
+                    html: embrulharBloco(`
+                        ${cabecalhoSecao('Resultados do Periodo', `${dados.periodoTexto} - Visao financeira consolidada`)}
+                        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+                            ${cardMetrica('Faturamento', window.fmtMoeda_n(dados.resumo.faturamento))}
+                            ${cardMetrica('Lucro Liquido', window.fmtMoeda_n(dados.resumo.lucro), '#047857')}
+                            ${cardMetrica('Despesas', window.fmtMoeda_n(dados.resumo.despesas), '#b91c1c')}
+                            ${cardMetrica('Caixa (Prod.)', window.fmtMoeda_n(dados.resumo.producaoTotal), '#8b5e00')}
+                        </div>
+                    `)
+                });
+            }
+
+            if (partes.includes('atendimento')) {
+                blocos.push({
+                    html: embrulharBloco(`
+                        ${cabecalhoSecao('Atendimentos Confirmados', 'Comparativo entre Luciano e Serginho')}
+                        <div style="display: grid; grid-template-columns: minmax(260px, 0.78fr) minmax(0, 1.22fr); gap: 16px; align-items: start;">
+                            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 18px; padding: 16px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px;">
+                                    <div>
+                                        <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.18em; color: #6b7280;">GRAFICO COMPARATIVO</div>
+                                        <div style="font-size: 12px; color: #111827; font-weight: 700; margin-top: 4px;">TOTAL CONFIRMADOS X QTD ATENDIMENTOS</div>
+                                    </div>
+                                    <div style="font-size: 11px; font-weight: 900; color: #8b5e00;">${window.fmtMoeda_n(resumoAtendimentoPdf.totalValor)}</div>
+                                </div>
+                                ${chartDataUrl ? `<img src="${chartDataUrl}" style="width: 100%; display: block; border-radius: 12px; max-height: 250px; object-fit: contain;">` : '<div style="height: 220px; border-radius: 12px; background: #f8fafc; border: 1px dashed #d1d5db; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 12px; font-weight: 700;">Grafico indisponivel</div>'}
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr; gap: 14px;">
+                                ${cardPessoa('Luciano', '#8b5e00', '#fffaf0', '#f0d48a', resumoAtendimentoPdf.Luciano)}
+                                ${cardPessoa('Serginho', '#047857', '#f0fdf4', '#86efac', resumoAtendimentoPdf.Serginho)}
+                            </div>
+                        </div>
+                    `)
+                });
+            }
+
+            if (partes.includes('distribuicao')) {
+                blocos.push({
+                    html: embrulharBloco(`
+                        ${cabecalhoSecao('Distribuicao Final', incluirDiscriminado ? 'Valores totais por integrante com destaque do que ainda esta em aberto' : 'Valores totais por integrante no periodo')}
+                        <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 18px; padding: 8px 18px;">
+                            ${linhaDistribuicao('Luciano', dados.distribuicao.Luciano)}
+                            ${linhaDistribuicao('Serginho', dados.distribuicao.Serginho)}
+                            ${linhaDistribuicao('Cesimbra', dados.distribuicao.Cesimbra)}
+                            <div style="display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 12px 0 4px 0;">
+                                <div style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #111827;">Levi</div>
+                                <div style="text-align: right;">
+                                    <div style="font-size: 14px; font-weight: 900; color: #111827;">
+                                        ${window.fmtMoeda_n(dados.distribuicao.Levi.total)}
+                                        ${incluirDiscriminado ? `<span style="font-size: 11px; font-weight: 700; color: #b91c1c;"> (a receber ${window.fmtMoeda_n(dados.distribuicao.Levi.aReceber)})</span>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `)
+                });
+            }
+
+            if (partes.includes('discriminado')) {
+                blocos.push({
+                    html: embrulharBloco(`
+                        ${cabecalhoSecao('Relatorio Discriminado', 'Evento, custos principais, modo de rateio, valor de producao e distribuicao detalhada')}
+                    `)
+                });
+
+                if (!dados.discriminado.length) {
+                    blocos.push({
+                        html: embrulharBloco(`
+                            <div style="padding: 18px 12px; text-align: center; color: #6b7280; border: 1px dashed #d1d5db; border-radius: 16px;">Nenhum evento confirmado no periodo.</div>
+                        `)
+                    });
+                } else {
+                    dados.discriminado.forEach((item) => {
+                        blocos.push({
+                            html: embrulharBloco(`
+                                <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 18px; padding: 18px;">
+                                    <div style="display: flex; justify-content: space-between; gap: 14px; align-items: start; margin-bottom: 14px;">
+                                        <div>
+                                            <div style="font-size: 15px; font-weight: 900; color: #111827; text-transform: uppercase;">${window.escapeHtml(item.cliente)}</div>
+                                            <div style="font-size: 11px; color: #6b7280; margin-top: 6px;">${window.escapeHtml(window.formatarDataExibicao(item.dataStr))}${item.tipo ? ` - ${window.escapeHtml(item.tipo)}` : ''}${item.cidade ? ` - ${window.escapeHtml(item.cidade)}` : ''}</div>
+                                            <div style="font-size: 10px; color: #8b5e00; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; margin-top: 8px;">${window.escapeHtml(item.atendimento)}</div>
+                                        </div>
+                                        <div style="text-align: right;">
+                                            <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.16em; color: #6b7280;">Valor do evento</div>
+                                            <div style="font-size: 18px; font-weight: 900; color: #111827; margin-top: 6px;">${window.fmtMoeda_n(item.total)}</div>
+                                            ${item.falta > 0 ? `<div style="font-size: 11px; font-weight: 800; color: #b91c1c; margin-top: 6px;">A receber ${window.fmtMoeda_n(item.falta)}</div>` : `<div style="font-size: 11px; font-weight: 800; color: #047857; margin-top: 6px;">Quitado</div>`}
+                                        </div>
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px;">
+                                        ${cardInfo('Roadie', item.roadieValor > 0 ? `Sim - ${window.fmtMoeda_n(item.roadieValor)}` : 'Nao')}
+                                        ${cardInfo('Van', item.van > 0 ? window.fmtMoeda_n(item.van) : 'Nao')}
+                                        ${cardInfo('Modo rateio', window.escapeHtml(item.modoRateio || 'Com producao (/5)'))}
+                                        ${cardInfo('Valor producao', window.fmtMoeda_n(item.producao))}
+                                        ${cardInfo('Recebido', window.fmtMoeda_n(item.recebido))}
+                                    </div>
+                                    <div style="border-top: 1px solid #e5e7eb; padding-top: 14px;">
+                                        <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.18em; color: #6b7280; margin-bottom: 10px;">Distribuicao por integrante</div>
+                                        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;">
+                                            ${cardInfo('Luciano', `${window.fmtMoeda_n(item.distribuicao.Luciano.total)}${item.distribuicao.Luciano.aReceber > 0 ? ` <span style="color: #b91c1c;">(a receber ${window.fmtMoeda_n(item.distribuicao.Luciano.aReceber)})</span>` : ''}`)}
+                                            ${cardInfo('Serginho', `${window.fmtMoeda_n(item.distribuicao.Serginho.total)}${item.distribuicao.Serginho.aReceber > 0 ? ` <span style="color: #b91c1c;">(a receber ${window.fmtMoeda_n(item.distribuicao.Serginho.aReceber)})</span>` : ''}`)}
+                                            ${cardInfo('Cesimbra', `${window.fmtMoeda_n(item.distribuicao.Cesimbra.total)}${item.distribuicao.Cesimbra.aReceber > 0 ? ` <span style="color: #b91c1c;">(a receber ${window.fmtMoeda_n(item.distribuicao.Cesimbra.aReceber)})</span>` : ''}`)}
+                                            ${cardInfo('Levi', `${window.fmtMoeda_n(item.distribuicao.Levi.total)}${item.distribuicao.Levi.aReceber > 0 ? ` <span style="color: #b91c1c;">(a receber ${window.fmtMoeda_n(item.distribuicao.Levi.aReceber)})</span>` : ''}`)}
+                                        </div>
+                                    </div>
+                                </div>
+                            `)
+                        });
+                    });
+                }
+            }
+
+            return { headerHtml, blocos };
+        };
+
+        window.gerarPdfRelatorioFinanceiro = async (partesSelecionadas = []) => {
+            if (!Array.isArray(partesSelecionadas) || !partesSelecionadas.length) return;
+            if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('Biblioteca de PDF indisponivel.');
+
+            Swal.fire({
+                title: 'Gerando PDF...',
+                html: 'Montando o relatorio financeiro.',
+                didOpen: () => Swal.showLoading(),
+                background: '#1a1d24',
+                color: '#fff',
+                allowOutsideClick: false
+            });
+
+            try {
+                const partesSet = new Set(partesSelecionadas);
+                if (partesSet.has('discriminado')) partesSet.add('distribuicao');
+                const partesOrdenadas = ['resumo', 'atendimento', 'distribuicao', 'discriminado'].filter(parte => partesSet.has(parte));
+                const dados = window.coletarDadosPdfRelatorioFinanceiro();
+                const chartCanvas = partesOrdenadas.includes('atendimento') ? document.getElementById('fin-atendimento-chart') : null;
+                const chartDataUrl = chartCanvas ? chartCanvas.toDataURL('image/png', 1.0) : '';
+                const logoHtml = await window.obterLogosCabecalhoFinanceiroHtml();
+                const estrutura = window.montarHtmlPdfRelatorioFinanceiro(dados, { partes: partesOrdenadas, chartDataUrl, logoHtml });
+
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const estado = { margem: 10, espaco: 4, cursorY: 10, primeiroBloco: true };
+
+                const canvasHeader = await window.renderizarBlocoPdfRelatorioFinanceiro(estrutura.headerHtml);
+                window.adicionarCanvasAoPdfRelatorioFinanceiro(pdf, canvasHeader, estado);
+
+                for (const bloco of estrutura.blocos) {
+                    const canvasBloco = await window.renderizarBlocoPdfRelatorioFinanceiro(bloco.html);
+                    window.adicionarCanvasAoPdfRelatorioFinanceiro(pdf, canvasBloco, estado);
+                }
+
+                const nomeArquivo = `Relatorio Financeiro - ${dados.periodoTexto.replace(/\s+/g, ' ').trim()}.pdf`;
+                pdf.save(nomeArquivo);
+                Swal.close();
+            } catch (error) {
+                console.error(error);
+                Swal.fire('Erro', error.message || 'Nao foi possivel gerar o PDF do relatorio.', 'error');
+            }
+        };
+
         window.abrirRelatorioRecebiveis = () => { 
             window.alternarView('relatorio-recebiveis'); 
             const mes = document.getElementById('filtroMesFin').value; 
@@ -3363,7 +5120,7 @@
             let totalPrevisto = 0;
             let totalRecebido = 0;
 
-            const recebiveis = window.dadosGlobais.filter(ev => {
+            const recebiveis = window.obterEventosPainelPrincipais().filter(ev => {
                 if (ev.status !== 'CONFIRMADO') return false;
                 const d = window.extrairAnoMes(ev.dataStr);
                 if (d.ano !== ano) return false;
@@ -3439,7 +5196,7 @@
             const array1 = [0,0,0,0,0,0,0,0,0,0,0,0];
             const array2 = [0,0,0,0,0,0,0,0,0,0,0,0];
 
-            window.dadosGlobais.forEach(ev => {
+            window.obterEventosPainelPrincipais().forEach(ev => {
                 if (ev.status !== 'CONFIRMADO') return;
                 const d = window.extrairAnoMes(ev.dataStr);
                 if (!d.ano || !d.mes) return;

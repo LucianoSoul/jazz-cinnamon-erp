@@ -31,6 +31,8 @@
         
         /* Transição suave para mudança de texto de status */
         #status-data { transition: color 0.3s ease; }
+        .status-apresentacao { transition: color 0.3s ease; }
+        .card-apresentacao { border: 1px solid #ece7dd; border-radius: 16px; padding: 16px; background: #fffdf9; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-start p-4">
@@ -72,14 +74,52 @@
                 <input type="email" id="email" placeholder="E-mail" required class="input-jazz">
             </div>
 
-            <div class="grid grid-cols-3 gap-4">
-                <div><label class="text-[9px] uppercase font-bold text-gray-400">Data</label><input type="date" id="data_evento" value="" required class="input-jazz text-sm" onchange="window.triggerVerificacao()"></div>
-                <div><label class="text-[9px] uppercase font-bold text-gray-400">Horário</label><input type="time" id="hora_inicio" required class="input-jazz text-sm" onchange="window.triggerVerificacao()"></div>
-                <div><label class="text-[9px] uppercase font-bold text-gray-400">Duração</label><select id="duracao" class="input-jazz text-sm" onchange="window.triggerVerificacao()"><option value="1:00">1h</option><option value="1:30" selected>1,5h</option><option value="2:00">2h</option></select></div>
+            <div class="grid grid-cols-2 gap-4">
+                <!-- LISTA DE EVENTOS ATUALIZADA -->
+                <select id="tipo_evento" required class="input-jazz uppercase text-sm" onchange="window.atualizarVisibilidadeApresentacoesMultiplas(); window.triggerVerificacao()">
+                    <option value="" disabled selected>Tipo de Evento...</option>
+                    <option value="ANIVERSÃRIO">AniversÃ¡rio</option>
+                    <option value="CORPORATIVO">Corporativo</option>
+                    <option value="CASAMENTO">Casamento</option>
+                    <option value="BODAS">Bodas</option>
+                    <option value="JANTAR">Jantar</option>
+                    <option value="FESTIVAL">Festival</option>
+                    <option value="FEIRA">Feira</option>
+                    <option value="OUTROS">Outros</option>
+                </select>
+                <input type="number" id="convidados" placeholder="Qtd Convidados" required class="input-jazz text-sm">
+            </div>
+
+            <div id="multi-apresentacoes-wrap" class="hidden bg-[#f8f5ee] border border-[#e7dcc7] rounded-2xl p-4 space-y-3">
+                <div>
+                    <label class="text-[10px] uppercase font-bold text-[#8b6c33] tracking-[0.18em] block mb-2">Quantas Apresentacoes?</label>
+                    <select id="qtd_apresentacoes" class="input-jazz text-sm" onchange="window.renderizarCamposApresentacoesExtras(); window.triggerVerificacao()">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                    </select>
+                </div>
+                <div class="space-y-1 text-[11px] text-gray-600 leading-relaxed">
+                    <p>* Havendo disponibilidade, voce pode solicitar dois shows no mesmo dia em horarios diferentes.</p>
+                    <p>* Voce pode escolher ate 5 datas para o seu evento.</p>
+                </div>
+            </div>
+
+            <div class="card-apresentacao">
+                <div class="text-[10px] uppercase font-bold text-[#8b6c33] tracking-[0.18em] mb-3">Apresentacao 1</div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div><label class="text-[9px] uppercase font-bold text-gray-400">Data</label><input type="date" id="data_evento" value="" required class="input-jazz text-sm" onchange="window.triggerVerificacaoApresentacao(1)"></div>
+                <div><label class="text-[9px] uppercase font-bold text-gray-400">Horario</label><input type="time" id="hora_inicio" required class="input-jazz text-sm" onchange="window.triggerVerificacaoApresentacao(1)"></div>
+                <div><label class="text-[9px] uppercase font-bold text-gray-400">Duracao</label><select id="duracao" class="input-jazz text-sm" onchange="window.triggerVerificacaoApresentacao(1)"><option value="1:00">1h</option><option value="1:30" selected>1,5h</option><option value="2:00">2h</option><option value="2:30">2,5h</option><option value="3:00">3h</option></select></div>
             </div>
 
             <!-- STATUS DINÂMICO E AUTO-EXPLICATIVO POSICIONADO ESTRATEGICAMENTE AQUI -->
-            <span id="status-data" class="text-[10px] font-bold flex items-center justify-center min-h-[3rem] uppercase border border-dashed border-gray-200 p-2 rounded text-center"></span>
+            <span id="status-data" class="status-apresentacao text-[10px] font-bold flex items-center justify-center min-h-[3rem] uppercase border border-dashed border-gray-200 p-2 rounded text-center mt-4"></span>
+            </div>
+
+            <div id="apresentacoes-extra-wrap" class="space-y-4 hidden"></div>
 
             <div class="grid grid-cols-2 gap-4">
                 <select id="estado" required class="input-jazz" onchange="window.carregarCidades()">
@@ -93,9 +133,9 @@
 
             <input type="text" id="local_nome" placeholder="Nome do Local (Buffet, Quinta, etc)" required class="input-jazz uppercase">
             
-            <div class="grid grid-cols-2 gap-4">
+            <div class="hidden">
                 <!-- LISTA DE EVENTOS ATUALIZADA -->
-                <select id="tipo_evento" required class="input-jazz uppercase text-sm">
+                <select id="tipo_evento_legado" class="input-jazz uppercase text-sm">
                     <option value="" disabled selected>Tipo de Evento...</option>
                     <option value="ANIVERSÁRIO">Aniversário</option>
                     <option value="CORPORATIVO">Corporativo</option>
@@ -105,7 +145,7 @@
                     <option value="FESTIVAL">Festival</option>
                     <option value="OUTROS">Outros</option>
                 </select>
-                <input type="number" id="convidados" placeholder="Qtd Convidados" required class="input-jazz text-sm">
+                <input type="number" id="convidados_legado" placeholder="Qtd Convidados" class="input-jazz text-sm">
             </div>
 
             <button type="submit" id="btnEnviar" class="w-full bg-black text-white py-4 rounded font-bold uppercase text-xs tracking-widest hover:bg-[#c5a059] transition flex justify-center items-center gap-2">
@@ -123,7 +163,7 @@
     <!-- SCRIPT FIREBASE -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, serverTimestamp, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, writeBatch, serverTimestamp, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyBoQvjJ_j_OO6uNbW0ar-rzRiiMR2Xe8m4", authDomain: "jazz-cinnamon-erp.firebaseapp.com", projectId: "jazz-cinnamon-erp", storageBucket: "jazz-cinnamon-erp.firebasestorage.app", messagingSenderId: "359043770756", appId: "1:359043770756:web:a5a4eec50e6e40f0ebd5d1" };
         const app = initializeApp(firebaseConfig);
@@ -134,6 +174,170 @@
         window.estadoAgenda = "LIVRE";
         window.concorrentesEncontrados = [];
         window.statusTimeout = null;
+        window.statusTimeouts = {};
+        window.concorrentesPorApresentacao = [];
+        window.estadoAgendaPorApresentacao = [];
+        window.TIPOS_EVENTO_MULTIAPRESENTACAO = new Set(["FESTIVAL", "CORPORATIVO", "FEIRA"]);
+        window.escapeHtml = (s) => String(s || '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+        window.calcularHoraTerminoFormulario = (inicio, duracao) => {
+            if(!inicio) return "";
+            const [hora, minuto] = String(inicio).split(':').map(Number);
+            const [durHora, durMin] = String(duracao || '1:30').split(':').map(Number);
+            const total = ((hora || 0) * 60) + (minuto || 0) + ((durHora || 0) * 60) + (durMin || 0);
+            const horaFinal = Math.floor(total / 60) % 24;
+            const minutoFinal = total % 60;
+            return `${String(horaFinal).padStart(2, '0')}:${String(minutoFinal).padStart(2, '0')}`;
+        };
+
+        window.dataInputParaDataStr = (dataInput) => {
+            const partes = String(dataInput || '').split('-');
+            if(partes.length !== 3) return '';
+            return `${partes[2]}-${partes[1]}-${partes[0]}`;
+        };
+
+        window.tipoAtualPermiteMultiplasApresentacoes = () => {
+            const tipo = String(document.getElementById('tipo_evento')?.value || '').toUpperCase();
+            return window.TIPOS_EVENTO_MULTIAPRESENTACAO.has(tipo);
+        };
+
+        window.totalApresentacoesSolicitadas = () => {
+            const total = parseInt(document.getElementById('qtd_apresentacoes')?.value || '1', 10);
+            return Math.max(1, Math.min(5, Number.isFinite(total) ? total : 1));
+        };
+
+        window.criarHtmlBlocoApresentacaoExtra = (indice, valores = {}) => `
+            <div class="card-apresentacao" data-apresentacao-indice="${indice}">
+                <div class="text-[10px] uppercase font-bold text-[#8b6c33] tracking-[0.18em] mb-3">Apresentacao ${indice}</div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="text-[9px] uppercase font-bold text-gray-400">Data</label>
+                        <input type="date" class="input-jazz text-sm js-apresentacao-data" value="${window.escapeHtml(valores.data || '')}" onchange="window.triggerVerificacaoApresentacao(${indice})">
+                    </div>
+                    <div>
+                        <label class="text-[9px] uppercase font-bold text-gray-400">Horario</label>
+                        <input type="time" class="input-jazz text-sm js-apresentacao-hora" value="${window.escapeHtml(valores.hora || '')}" onchange="window.triggerVerificacaoApresentacao(${indice})">
+                    </div>
+                    <div>
+                        <label class="text-[9px] uppercase font-bold text-gray-400">Duracao</label>
+                        <select class="input-jazz text-sm js-apresentacao-duracao" onchange="window.triggerVerificacaoApresentacao(${indice})">
+                            <option value="1:00" ${valores.duracao === '1:00' ? 'selected' : ''}>1h</option>
+                            <option value="1:30" ${(valores.duracao || '1:30') === '1:30' ? 'selected' : ''}>1,5h</option>
+                            <option value="2:00" ${valores.duracao === '2:00' ? 'selected' : ''}>2h</option>
+                            <option value="2:30" ${valores.duracao === '2:30' ? 'selected' : ''}>2,5h</option>
+                            <option value="3:00" ${valores.duracao === '3:00' ? 'selected' : ''}>3h</option>
+                        </select>
+                    </div>
+                </div>
+                <span id="status-data-${indice}" class="status-apresentacao text-[10px] font-bold flex items-center justify-center min-h-[3rem] uppercase border border-dashed border-gray-200 p-2 rounded text-center mt-4"></span>
+            </div>
+        `;
+
+        window.obterBlocosApresentacaoFormulario = () => {
+            const blocos = [{
+                indice: 1,
+                dataEl: document.getElementById('data_evento'),
+                horaEl: document.getElementById('hora_inicio'),
+                duracaoEl: document.getElementById('duracao'),
+                statusEl: document.getElementById('status-data')
+            }];
+
+            document.querySelectorAll('#apresentacoes-extra-wrap [data-apresentacao-indice]').forEach((card) => {
+                blocos.push({
+                    indice: parseInt(card.dataset.apresentacaoIndice || '0', 10),
+                    dataEl: card.querySelector('.js-apresentacao-data'),
+                    horaEl: card.querySelector('.js-apresentacao-hora'),
+                    duracaoEl: card.querySelector('.js-apresentacao-duracao'),
+                    statusEl: card.querySelector('.status-apresentacao')
+                });
+            });
+
+            return blocos.sort((a, b) => a.indice - b.indice);
+        };
+
+        window.setStatusStepParaElemento = (elemento, textoInicial, textoSecundario, cor, delayMs = 2000) => {
+            const label = typeof elemento === 'string' ? document.getElementById(elemento) : elemento;
+            if(!label) return;
+            const chave = label.id || `status-${Math.random()}`;
+            if(window.statusTimeouts[chave]) clearTimeout(window.statusTimeouts[chave]);
+
+            label.innerText = textoInicial;
+            label.style.color = cor;
+
+            if (textoSecundario) {
+                window.statusTimeouts[chave] = setTimeout(() => {
+                    label.innerText = textoSecundario;
+                    label.classList.add('animate-pulse');
+                    setTimeout(() => label.classList.remove('animate-pulse'), 1200);
+                }, delayMs);
+            }
+        };
+
+        window.definirStatusInicialApresentacao = (statusEl, indice = 1) => {
+            if(!statusEl) return;
+            const texto = indice === 1
+                ? 'PREENCHA A DATA PARA CONSULTAR A DISPONIBILIDADE'
+                : `PREENCHA A DATA DA APRESENTACAO ${indice}`;
+            window.setStatusStepParaElemento(statusEl, texto, null, '#9ca3af');
+        };
+
+        window.obterCidadeFormulario = () => {
+            const cidadeSelect = document.getElementById('cidade');
+            return (cidadeSelect?.options?.[cidadeSelect.selectedIndex]?.value || '').toUpperCase();
+        };
+
+        window.obterEstadoFormulario = () => String(document.getElementById('estado')?.value || '').toUpperCase();
+
+        window.obterValoresApresentacoesExistentes = () => {
+            const valores = {};
+            window.obterBlocosApresentacaoFormulario().forEach((bloco) => {
+                valores[bloco.indice] = {
+                    data: bloco.dataEl?.value || '',
+                    hora: bloco.horaEl?.value || '',
+                    duracao: bloco.duracaoEl?.value || '1:30'
+                };
+            });
+            return valores;
+        };
+
+        window.renderizarCamposApresentacoesExtras = () => {
+            const wrap = document.getElementById('apresentacoes-extra-wrap');
+            if(!wrap) return;
+
+            const valores = window.obterValoresApresentacoesExistentes();
+            const permitir = window.tipoAtualPermiteMultiplasApresentacoes();
+            const total = permitir ? window.totalApresentacoesSolicitadas() : 1;
+
+            if (!permitir || total <= 1) {
+                wrap.innerHTML = '';
+                wrap.classList.add('hidden');
+                window.concorrentesPorApresentacao = window.concorrentesPorApresentacao.slice(0, 1);
+                window.estadoAgendaPorApresentacao = window.estadoAgendaPorApresentacao.slice(0, 1);
+                return;
+            }
+
+            let html = '';
+            for (let indice = 2; indice <= total; indice += 1) {
+                html += window.criarHtmlBlocoApresentacaoExtra(indice, valores[indice] || {});
+            }
+            wrap.innerHTML = html;
+            wrap.classList.remove('hidden');
+
+            window.obterBlocosApresentacaoFormulario().forEach((bloco) => {
+                if (!String(bloco.statusEl?.innerText || '').trim()) {
+                    window.definirStatusInicialApresentacao(bloco.statusEl, bloco.indice);
+                }
+            });
+        };
+
+        window.atualizarVisibilidadeApresentacoesMultiplas = () => {
+            const wrap = document.getElementById('multi-apresentacoes-wrap');
+            const qtdEl = document.getElementById('qtd_apresentacoes');
+            const permitir = window.tipoAtualPermiteMultiplasApresentacoes();
+            if (wrap) wrap.classList.toggle('hidden', !permitir);
+            if (!permitir && qtdEl) qtdEl.value = '1';
+            window.renderizarCamposApresentacoesExtras();
+        };
 
         // SUBSTITUIÇÃO 1: Evita bloqueios de carregamento no Deploy garantindo a exibição inicial
         setTimeout(() => {
@@ -431,6 +635,7 @@
                 local: document.getElementById('local_nome').value.toUpperCase(), 
                 tipo: document.getElementById('tipo_evento').value,
                 convidados: document.getElementById('convidados').value,
+                atendimento: "Luciano",
                 status: "PRE_RESERVA", 
                 statusAgenda: window.estadoAgenda, 
                 concorrentes: window.concorrentesEncontrados,
@@ -450,6 +655,360 @@
             } catch (err) { Swal.fire("Erro", "Falha ao enviar a solicitação.", "error"); } 
             finally { document.getElementById('btn-spinner').classList.add('hidden'); }
         };
+
+        window.listarConcorrentesData = async (dataInput) => {
+            const concorrentes = [];
+            if (!dataInput) return concorrentes;
+
+            const partes = String(dataInput).split('-');
+            if (partes.length !== 3) return concorrentes;
+
+            const f1 = `${partes[2]}-${partes[1]}-${partes[0]}`;
+            const f2 = `${partes[0]}-${partes[1]}-${partes[2]}`;
+            const f3 = `${partes[2]}/${partes[1]}/${partes[0]}`;
+
+            try {
+                const [s1, s2, s3] = await Promise.all([
+                    getDocs(query(collection(db, "disponibilidade_publica"), where("dataStr", "==", f1))),
+                    getDocs(query(collection(db, "disponibilidade_publica"), where("dataStr", "==", f2))),
+                    getDocs(query(collection(db, "disponibilidade_publica"), where("dataStr", "==", f3)))
+                ]);
+
+                [s1, s2, s3].forEach((snap) => {
+                    snap.forEach((d) => {
+                        const dados = d.data();
+                        if (dados.status === 'REPROVADO' || dados.status === 'LIXEIRA') return;
+                        if (!concorrentes.find((item) => item.id === d.id)) {
+                            concorrentes.push({ id: d.id, ...dados, origem: 'sistema_interno' });
+                        }
+                    });
+                });
+            } catch (e) {
+                console.error("Erro na busca Firebase:", e);
+            }
+
+            try {
+                const reqAg = await fetch(AGENDA_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ acao: "VERIFICAR_AGENDA_DIA", dataBusca: f1 })
+                }).then((r) => r.json());
+                const eventosAgenda = reqAg.eventosExternos || reqAg.eventos || reqAg.eventosAgenda || [];
+                eventosAgenda.forEach((ex, indice) => {
+                    concorrentes.push({
+                        id: `ext_${f1}_${indice}_${String(ex.horaInicio || '').replace(':', '')}`,
+                        status: 'CONFIRMADO',
+                        horaInicio: ex.horaInicio,
+                        horaTermino: ex.horaTermino,
+                        cliente: ex.titulo,
+                        origem: 'google_calendar',
+                        cidade: ex.cidade || '',
+                        uf: ex.uf || ''
+                    });
+                });
+            } catch (e) {
+                console.error("Erro na busca Agenda:", e);
+            }
+
+            return concorrentes;
+        };
+
+        window.avaliarDisponibilidadeApresentacao = async (bloco) => {
+            const dataInput = bloco.dataEl?.value || '';
+            const horaIni = bloco.horaEl?.value || '';
+            const duracao = bloco.duracaoEl?.value || '1:30';
+            const cidadeInput = window.obterCidadeFormulario();
+            const estadoInput = window.obterEstadoFormulario();
+
+            if (!dataInput) {
+                window.definirStatusInicialApresentacao(bloco.statusEl, bloco.indice);
+                return { statusAgenda: 'LIVRE', concorrentes: [] };
+            }
+
+            window.setStatusStepParaElemento(bloco.statusEl, 'CONSULTANDO AGENDA INTERNA E GOOGLE...', null, '#999');
+            const concorrentes = await window.listarConcorrentesData(dataInput);
+
+            if (!concorrentes.length) {
+                window.setStatusStepParaElemento(bloco.statusEl, 'DATA TOTALMENTE LIVRE PARA O SEU EVENTO!', null, '#10b981');
+                return { statusAgenda: 'LIVRE', concorrentes: [] };
+            }
+
+            if (!horaIni) {
+                window.setStatusStepParaElemento(
+                    bloco.statusEl,
+                    'JA EXISTEM EVENTOS NESTA DATA.',
+                    'PREENCHA O HORARIO PARA AVALIARMOS A LOGISTICA.',
+                    '#f59e0b',
+                    2000
+                );
+                return { statusAgenda: 'PENDENTE', concorrentes };
+            }
+
+            if (!estadoInput || !cidadeInput) {
+                window.setStatusStepParaElemento(
+                    bloco.statusEl,
+                    'HORARIO REGISTRADO E PRE-ANALISADO.',
+                    'PREENCHA ESTADO E MUNICIPIO PARA CONFIRMARMOS O DESLOCAMENTO.',
+                    '#f59e0b',
+                    1800
+                );
+                return { statusAgenda: 'PENDENTE', concorrentes };
+            }
+
+            const [nh, nm] = horaIni.split(':').map(Number);
+            const novoIniMin = (nh * 60) + nm;
+            const [dh, dm] = String(duracao || '2:00').split(':').map(Number);
+            const novoFimMin = novoIniMin + ((dh * 60) + (dm || 0));
+
+            let piorCenario = "LIVRE";
+            let msgFinal = "";
+            let colorFinal = "";
+
+            for (const ev of concorrentes) {
+                let evUF = (ev.uf || "").toUpperCase();
+                let evCidade = (ev.cidade || "").toUpperCase();
+                if (evCidade.includes(" - ")) evCidade = evCidade.split(" - ")[1].trim();
+
+                if (evUF && estadoInput && evUF !== estadoInput && evUF !== "MUNICIPIO") {
+                    if (ev.status === 'CONFIRMADO') {
+                        piorCenario = "INDISPONIVEL";
+                        msgFinal = `INDISPONIVEL. SHOW CONFIRMADO NESTE DIA EM OUTRO ESTADO (${evUF}).`;
+                        colorFinal = "#ef4444";
+                        break;
+                    }
+                    piorCenario = "ESPERA";
+                    msgFinal = `SHOW EM NEGOCIACAO EM OUTRO ESTADO (${evUF}) NO MESMO DIA. ENVIE PARA FILA DE ESPERA.`;
+                    colorFinal = "#f59e0b";
+                    continue;
+                }
+
+                let temMargem = false;
+                if (ev.horaInicio) {
+                    const [eh, em] = ev.horaInicio.split(':').map(Number);
+                    const inicioExistente = (eh * 60) + em;
+                    const fimExistente = ev.horaTermino
+                        ? ((Number(ev.horaTermino.split(':')[0]) * 60) + Number(ev.horaTermino.split(':')[1]))
+                        : inicioExistente + 120;
+                    if (novoIniMin - fimExistente >= 90 || inicioExistente - novoFimMin >= 90) temMargem = true;
+                }
+
+                if (evCidade === cidadeInput || !evCidade) {
+                    if (temMargem) {
+                        if (piorCenario !== "INDISPONIVEL" && piorCenario !== "ESPERA") {
+                            piorCenario = "LIVRE_COM_MARGEM";
+                            msgFinal = 'JA EXISTE UM EVENTO NESTA DATA, MAS TEMOS MARGEM DE LOGISTICA PARA ATENDER VOCE!';
+                            colorFinal = "#3b82f6";
+                        }
+                    } else if (ev.status === 'CONFIRMADO') {
+                        piorCenario = "INDISPONIVEL";
+                        msgFinal = 'INDISPONIVEL. JA TEMOS UM EVENTO CONFIRMADO NESTE HORARIO.';
+                        colorFinal = "#ef4444";
+                        break;
+                    } else {
+                        piorCenario = "ESPERA";
+                        msgFinal = 'ESTA DATA POSSUI UMA PRE-RESERVA EM ANDAMENTO NESTE HORARIO. ENVIE PARA FILA DE ESPERA.';
+                        colorFinal = "#f59e0b";
+                    }
+                } else if (temMargem) {
+                    if (piorCenario !== "INDISPONIVEL" && piorCenario !== "ESPERA") {
+                        piorCenario = "AVALIAR_LOGISTICA";
+                        const statusNome = ev.status === 'PRE_RESERVA' ? 'LEAD' : ev.status;
+                        msgFinal = `AVALIAR LOGISTICA - DATA EM ${statusNome} EM ${evCidade} - ${evUF || estadoInput}.`;
+                        colorFinal = "#3b82f6";
+                    }
+                } else if (ev.status === 'CONFIRMADO') {
+                    piorCenario = "INDISPONIVEL";
+                    msgFinal = `INDISPONIVEL. EVENTO CONFIRMADO EM ${evCidade} COM TEMPO DE DESLOCAMENTO INSUFICIENTE.`;
+                    colorFinal = "#ef4444";
+                    break;
+                } else {
+                    piorCenario = "ESPERA";
+                    msgFinal = `PRE-RESERVA EM ${evCidade} SEM MARGEM DE DESLOCAMENTO. ENVIE PARA FILA DE ESPERA.`;
+                    colorFinal = "#f59e0b";
+                }
+            }
+
+            window.setStatusStepParaElemento(bloco.statusEl, msgFinal, null, colorFinal || '#10b981');
+            return {
+                statusAgenda: (piorCenario === "INDISPONIVEL" || piorCenario === "ESPERA") ? 'OCUPADO' : 'LIVRE',
+                concorrentes
+            };
+        };
+
+        window.atualizarResumoAgendaFormulario = () => {
+            const prioridades = { OCUPADO: 3, PENDENTE: 2, LIVRE: 1 };
+            let pior = 'LIVRE';
+            const mapaConcorrentes = new Map();
+
+            window.concorrentesPorApresentacao.forEach((lista, indice) => {
+                (lista || []).forEach((item) => {
+                    const chave = item.id || `${item.cliente || 'evento'}_${item.horaInicio || ''}_${indice}`;
+                    if (!mapaConcorrentes.has(chave)) {
+                        mapaConcorrentes.set(chave, { ...item, apresentacaoIndice: indice + 1 });
+                    }
+                });
+            });
+
+            window.estadoAgendaPorApresentacao.forEach((status) => {
+                if ((prioridades[status] || 0) > (prioridades[pior] || 0)) pior = status;
+            });
+
+            window.estadoAgenda = pior;
+            window.concorrentesEncontrados = Array.from(mapaConcorrentes.values());
+        };
+
+        window.triggerVerificacaoApresentacao = async (indice) => {
+            const bloco = window.obterBlocosApresentacaoFormulario().find((item) => item.indice === indice);
+            if (!bloco) return;
+            const resultado = await window.avaliarDisponibilidadeApresentacao(bloco);
+            window.estadoAgendaPorApresentacao[indice - 1] = resultado.statusAgenda;
+            window.concorrentesPorApresentacao[indice - 1] = resultado.concorrentes;
+            window.atualizarResumoAgendaFormulario();
+        };
+
+        window.triggerVerificacao = async () => {
+            const blocos = window.obterBlocosApresentacaoFormulario();
+            await Promise.all(blocos.map((bloco) => window.triggerVerificacaoApresentacao(bloco.indice)));
+        };
+
+        window.coletarApresentacoesFormulario = () => {
+            const cidade = window.obterCidadeFormulario();
+            const uf = window.obterEstadoFormulario();
+            const local = document.getElementById('local_nome')?.value.toUpperCase() || '';
+
+            return window.obterBlocosApresentacaoFormulario().map((bloco) => {
+                const dataInput = bloco.dataEl?.value || '';
+                const dataStr = window.dataInputParaDataStr(dataInput);
+                const horaInicio = bloco.horaEl?.value || '';
+                const duracao = bloco.duracaoEl?.value || '1:30';
+                return {
+                    ordem: bloco.indice,
+                    dataInput,
+                    dataStr,
+                    horaInicio,
+                    duracao,
+                    horaTermino: window.calcularHoraTerminoFormulario(horaInicio, duracao),
+                    cidade,
+                    uf,
+                    local,
+                    statusAgenda: window.estadoAgendaPorApresentacao[bloco.indice - 1] || 'LIVRE',
+                    concorrentes: window.concorrentesPorApresentacao[bloco.indice - 1] || []
+                };
+            });
+        };
+
+        document.getElementById('formCliente').onsubmit = async (e) => {
+            e.preventDefault();
+            document.getElementById('btn-spinner').classList.remove('hidden');
+
+            try {
+                await window.triggerVerificacao();
+
+                const docVal = document.getElementById('documento').value;
+                const cliente = document.getElementById('nome_razao').value.toUpperCase();
+                const tipo = document.getElementById('tipo_evento').value;
+                const convidados = document.getElementById('convidados').value;
+                const apresentacoes = window.coletarApresentacoesFormulario();
+                const totalEsperado = window.tipoAtualPermiteMultiplasApresentacoes() ? window.totalApresentacoesSolicitadas() : 1;
+
+                if (apresentacoes.length !== totalEsperado || apresentacoes.some((item) => !item.dataStr || !item.horaInicio || !item.duracao)) {
+                    throw new Error('Preencha data, horario e duracao de todas as apresentacoes solicitadas.');
+                }
+
+                const pedidosRef = collection(db, "pedidos");
+                const principalRef = doc(pedidosRef);
+                const subRefs = apresentacoes.slice(1).map(() => doc(pedidosRef));
+                const grupoId = principalRef.id;
+                const statusAgendaGrupo = window.estadoAgenda || 'LIVRE';
+                const concorrentesGrupo = Array.isArray(window.concorrentesEncontrados) ? window.concorrentesEncontrados : [];
+                const base = {
+                    cliente,
+                    documento: document.getElementById('documento').value,
+                    documentoLimpo: docVal.replace(/\D/g, ""),
+                    whatsapp: document.getElementById('whatsapp').value,
+                    email: document.getElementById('email').value,
+                    cidade: window.obterCidadeFormulario(),
+                    uf: window.obterEstadoFormulario(),
+                    local: document.getElementById('local_nome').value.toUpperCase(),
+                    tipo,
+                    convidados,
+                    atendimento: "Luciano",
+                    status: "PRE_RESERVA",
+                    valor: 0,
+                    valorPago: 0,
+                    statusPgto: "PENDENTE",
+                    origem: "form_orcamento_publico",
+                    dataInsercaoLead: serverTimestamp(),
+                    data_insercao_lead: serverTimestamp(),
+                    criadoEm: serverTimestamp(),
+                    grupoId,
+                    eventoPrincipalId: principalRef.id,
+                    qtdApresentacoes: apresentacoes.length,
+                    temSubeventos: apresentacoes.length > 1
+                };
+
+                const refsOrdenadas = [principalRef, ...subRefs];
+                const apresentacoesGrupo = apresentacoes.map((item, indice) => ({
+                    pedidoId: refsOrdenadas[indice].id,
+                    ordem: item.ordem,
+                    dataStr: item.dataStr,
+                    horaInicio: item.horaInicio,
+                    duracao: item.duracao,
+                    horaTermino: item.horaTermino,
+                    statusAgenda: item.statusAgenda,
+                    concorrentesQtd: Array.isArray(item.concorrentes) ? item.concorrentes.length : 0,
+                    ehPrincipal: indice === 0
+                }));
+
+                const batch = writeBatch(db);
+                const principalApresentacao = apresentacoes[0];
+                batch.set(principalRef, {
+                    ...base,
+                    dataStr: principalApresentacao.dataStr,
+                    horaInicio: principalApresentacao.horaInicio,
+                    duracao: principalApresentacao.duracao,
+                    horaTermino: principalApresentacao.horaTermino,
+                    statusAgenda: statusAgendaGrupo,
+                    concorrentes: concorrentesGrupo,
+                    ehEventoPrincipal: true,
+                    ehSubevento: false,
+                    subeventosIds: subRefs.map((ref) => ref.id),
+                    apresentacoesGrupo
+                });
+
+                subRefs.forEach((ref, index) => {
+                    const apresentacao = apresentacoes[index + 1];
+                    batch.set(ref, {
+                        ...base,
+                        dataStr: apresentacao.dataStr,
+                        horaInicio: apresentacao.horaInicio,
+                        duracao: apresentacao.duracao,
+                        horaTermino: apresentacao.horaTermino,
+                        statusAgenda: apresentacao.statusAgenda,
+                        concorrentes: apresentacao.concorrentes,
+                        origem: "form_orcamento_publico_subevento",
+                        ehEventoPrincipal: false,
+                        ehSubevento: true,
+                        subeventoOrdem: apresentacao.ordem,
+                        pedidoPrincipalFinanceiroId: principalRef.id,
+                        financeiroNoPrincipal: true
+                    });
+                });
+
+                await batch.commit();
+                document.getElementById('formCliente').classList.add('hidden');
+                document.getElementById('sucesso-cliente').classList.remove('hidden');
+            } catch (err) {
+                Swal.fire("Erro", err?.message || "Falha ao enviar a solicitacao.", "error");
+            } finally {
+                document.getElementById('btn-spinner').classList.add('hidden');
+            }
+        };
+
+        setTimeout(() => {
+            window.atualizarVisibilidadeApresentacoesMultiplas();
+            window.obterBlocosApresentacaoFormulario().forEach((bloco) => window.definirStatusInicialApresentacao(bloco.statusEl, bloco.indice));
+        }, 120);
     </script>
 </body>
 </html>

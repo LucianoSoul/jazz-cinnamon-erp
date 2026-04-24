@@ -30,6 +30,40 @@ const NOMES_CRIADORES_AGENDA = {
   "sergiodobass@gmail.com": "Serginho",
 };
 
+function normalizarTextoBusca(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+}
+
+function normalizarAtendimentoResponsavel(value, fallback = "") {
+  const raw = normalizarTextoBusca(value);
+  if (!raw) return fallback;
+  if (raw.includes("SERG")) return "Serginho";
+  if (raw.includes("LUCI")) return "Luciano";
+  return fallback;
+}
+
+function atendimentoPorCriadorAgenda(criadorEmail = "", criadorNome = "") {
+  const email = String(criadorEmail || "").trim().toLowerCase();
+  if (email && NOMES_CRIADORES_AGENDA[email]) return NOMES_CRIADORES_AGENDA[email];
+  const nome = normalizarAtendimentoResponsavel(criadorNome, "");
+  return nome || "Luciano";
+}
+
+function atendimentoPedidoPadrao(pedido = {}) {
+  const atendimentoInformado = normalizarAtendimentoResponsavel(pedido.atendimento, "");
+  if (atendimentoInformado) return atendimentoInformado;
+
+  const criadorEmail = pedido.origemCriadorEmail || pedido.criadorEmail || "";
+  const criadorNome = pedido.origemCriadorNome || pedido.criadorNome || "";
+  if (criadorEmail || criadorNome) return atendimentoPorCriadorAgenda(criadorEmail, criadorNome);
+
+  return "Luciano";
+}
+
 const CAMPOS_RELEVANTES_AGENDA = [
   "cliente",
   "nome_contratante_formal",
@@ -49,6 +83,21 @@ const CAMPOS_RELEVANTES_AGENDA = [
   "whatsapp",
   "valor",
   "valor_final_contrato",
+];
+
+const CAMPOS_PROPAGADOS_GRUPO = [
+  "status",
+  "cliente",
+  "documento",
+  "documentoLimpo",
+  "whatsapp",
+  "email",
+  "cidade",
+  "uf",
+  "local",
+  "tipo",
+  "convidados",
+  "atendimento",
 ];
 
 function env(name, fallback = "") {
@@ -1137,14 +1186,7 @@ function recursoEventoAgenda(pedido, eventoExistente = null) {
   };
 }
 
-async function sincronizarPedidoComAgenda(pedidoId, origem = "manual") {
-  if (!pedidoId) throw new Error("PEDIDO_ID_OBRIGATORIO");
-
-  const pedidoRef = db.collection("pedidos").doc(pedidoId);
-  const pedidoSnap = await pedidoRef.get();
-  if (!pedidoSnap.exists) throw new Error("PEDIDO_NAO_ENCONTRADO");
-
-  const pedido = pedidoSnap.data();
+async function sincronizarDocumentoPedidoComAgenda(pedidoRef, pedidoId, pedido, origem = "manual") {
   const calendar = await getCalendarClient();
   const agendaIdAtual = pedido.agendaId || pedido.agendaEventId || "";
 
@@ -1206,6 +1248,37 @@ async function sincronizarPedidoComAgenda(pedidoId, origem = "manual") {
   };
 }
 
+async function sincronizarPedidoComAgenda(pedidoId, origem = "manual") {
+  if (!pedidoId) throw new Error("PEDIDO_ID_OBRIGATORIO");
+
+  const pedidoRef = db.collection("pedidos").doc(pedidoId);
+  const pedidoSnap = await pedidoRef.get();
+  if (!pedidoSnap.exists) throw new Error("PEDIDO_NAO_ENCONTRADO");
+
+  return sincronizarDocumentoPedidoComAgenda(pedidoRef, pedidoId, pedidoSnap.data(), origem);
+}
+
+async function sincronizarGrupoPorPedidoId(pedidoId, origem = "manual") {
+  const grupo = await carregarGrupoPedido(pedidoId);
+  const resultados = [];
+
+  for (const pedido of grupo.pedidos) {
+    const pedidoRef = db.collection("pedidos").doc(pedido.id);
+    const resultado = await sincronizarDocumentoPedidoComAgenda(pedidoRef, pedido.id, pedido, origem);
+    resultados.push({ pedidoId: pedido.id, ...resultado });
+  }
+
+  const principalResultado = resultados.find((item) => item.pedidoId === grupo.principalId) || resultados[0] || { success: true };
+  return {
+    success: true,
+    grupoId: grupo.grupoId,
+    principalId: grupo.principalId,
+    agendaId: principalResultado.agendaId || "",
+    agendaIcalUid: principalResultado.agendaIcalUid || "",
+    resultados,
+  };
+}
+
 function camposAgendaMudaram(before = {}, after = {}) {
   return CAMPOS_RELEVANTES_AGENDA.some((campo) => JSON.stringify(before[campo] ?? null) !== JSON.stringify(after[campo] ?? null));
 }
@@ -1233,6 +1306,119 @@ function patchDatasEstagio(before = {}, after = {}) {
   }
 
   return patch;
+}
+
+function patchAtendimentoPedido(before = {}, after = {}) {
+  const atendimentoAtual = normalizarAtendimentoResponsavel(after.atendimento, "");
+  if (atendimentoAtual) {
+    return String(after.atendimento || "").trim() === atendimentoAtual ? {} : { atendimento: atendimentoAtual };
+  }
+
+  return { atendimento: atendimentoPedidoPadrao(after) };
+}
+
+function ehSubeventoPedido(pedidoId = "", pedido = {}) {
+  return Boolean(pedido?.ehSubevento && pedido?.eventoPrincipalId && pedido.eventoPrincipalId !== pedidoId);
+}
+
+function grupoIdPedido(pedidoId = "", pedido = {}) {
+  return String(pedido?.grupoId || pedido?.eventoPrincipalId || pedidoId || "").trim();
+}
+
+function ordemPedidoGrupo(pedidoId = "", pedido = {}) {
+  if (!pedido) return 999;
+  if (pedido.ehEventoPrincipal || !ehSubeventoPedido(pedidoId, pedido)) return 1;
+  const ordem = Number(pedido.subeventoOrdem || pedido.ordemApresentacao || 0);
+  return Number.isFinite(ordem) && ordem > 0 ? ordem : 999;
+}
+
+function ordenarPedidosGrupo(pedidos = []) {
+  return [...pedidos].sort((a, b) => {
+    const ordemA = ordemPedidoGrupo(a.id, a);
+    const ordemB = ordemPedidoGrupo(b.id, b);
+    if (ordemA !== ordemB) return ordemA - ordemB;
+
+    const dataA = formatarDataIsoLocal(parseDataEvento(a.dataStr || a.data) || { ano: 9999, mes: 12, dia: 31 });
+    const dataB = formatarDataIsoLocal(parseDataEvento(b.dataStr || b.data) || { ano: 9999, mes: 12, dia: 31 });
+    if (dataA !== dataB) return dataA.localeCompare(dataB);
+
+    return String(a.horaInicio || "").localeCompare(String(b.horaInicio || ""));
+  });
+}
+
+async function carregarGrupoPedido(pedidoId) {
+  if (!pedidoId) throw new Error("PEDIDO_ID_OBRIGATORIO");
+
+  const pedidoRef = db.collection("pedidos").doc(pedidoId);
+  const pedidoSnap = await pedidoRef.get();
+  if (!pedidoSnap.exists) throw new Error("PEDIDO_NAO_ENCONTRADO");
+
+  const pedido = pedidoSnap.data();
+  const principalId = ehSubeventoPedido(pedidoId, pedido) ? String(pedido.eventoPrincipalId || "") : pedidoId;
+  const principalRef = db.collection("pedidos").doc(principalId);
+  const principalSnap = principalId === pedidoId ? pedidoSnap : await principalRef.get();
+  if (!principalSnap.exists) throw new Error("PEDIDO_NAO_ENCONTRADO");
+
+  const principal = principalSnap.data();
+  const grupoId = grupoIdPedido(principalId, principal);
+  if (!grupoId) {
+    return {
+      principalId,
+      grupoId: principalId,
+      principal: { id: principalId, ...principal },
+      pedidos: [{ id: principalId, ...principal }],
+    };
+  }
+
+  const grupoSnap = await db.collection("pedidos").where("grupoId", "==", grupoId).get();
+  const pedidos = [];
+  grupoSnap.forEach((docSnap) => pedidos.push({ id: docSnap.id, ...docSnap.data() }));
+
+  if (!pedidos.find((item) => item.id === principalId)) {
+    pedidos.push({ id: principalId, ...principal });
+  }
+
+  return {
+    principalId,
+    grupoId,
+    principal: { id: principalId, ...principal },
+    pedidos: ordenarPedidosGrupo(pedidos),
+  };
+}
+
+function camposGrupoAlterados(before = {}, after = {}) {
+  const patch = {};
+  CAMPOS_PROPAGADOS_GRUPO.forEach((campo) => {
+    if (JSON.stringify(before[campo] ?? null) !== JSON.stringify(after[campo] ?? null)) {
+      patch[campo] = after[campo] ?? "";
+    }
+  });
+  return patch;
+}
+
+async function propagarCamposGrupoDoPrincipal(pedidoId, before = {}, after = {}) {
+  if (ehSubeventoPedido(pedidoId, after)) return;
+  if (!before || !Object.keys(before).length) return;
+
+  const grupoId = grupoIdPedido(pedidoId, after);
+  if (!grupoId) return;
+
+  const patch = camposGrupoAlterados(before, after);
+  if (!Object.keys(patch).length) return;
+
+  const grupoSnap = await db.collection("pedidos").where("grupoId", "==", grupoId).get();
+  const batch = db.batch();
+  let alterados = 0;
+
+  grupoSnap.forEach((docSnap) => {
+    if (docSnap.id === pedidoId) return;
+    const dados = docSnap.data();
+    if (!ehSubeventoPedido(docSnap.id, dados)) return;
+    batch.set(docSnap.ref, patch, { merge: true });
+    alterados += 1;
+  });
+
+  if (alterados > 0) await batch.commit();
 }
 
 function inicioEventoGoogle(evento) {
@@ -1300,6 +1486,7 @@ function resumoEventoGoogle(evento, ocultarTitulo = false) {
   const fimMin = ((fimLocal?.hora || 0) * 60) + (fimLocal?.minuto || 0);
   const duracao = Math.max(15, Math.round((fimDate.getTime() - inicioDate.getTime()) / 60000));
   const criadorEmail = String(evento.creator?.email || evento.organizer?.email || "").toLowerCase();
+  const criadorNome = NOMES_CRIADORES_AGENDA[criadorEmail] || criadorEmail || "Google Agenda";
   const titulo = evento.summary || "Evento Google Agenda";
 
   return {
@@ -1315,7 +1502,8 @@ function resumoEventoGoogle(evento, ocultarTitulo = false) {
     status: inferirStatusAgendaPorTitulo(titulo),
     cor: evento.colorId || "",
     criadorEmail,
-    criadorNome: NOMES_CRIADORES_AGENDA[criadorEmail] || criadorEmail || "Google Agenda",
+    criadorNome,
+    atendimento: atendimentoPorCriadorAgenda(criadorEmail, criadorNome),
     origem: "google_calendar",
   };
 }
@@ -1605,6 +1793,7 @@ async function importarEventoGoogleParaErp(eventId) {
     origem: "google_calendar_manual",
     origemCriadorEmail: resumo.criadorEmail,
     origemCriadorNome: resumo.criadorNome,
+    atendimento: resumo.atendimento || "Luciano",
     criadoEm: admin.firestore.FieldValue.serverTimestamp(),
   });
 
@@ -1807,7 +1996,7 @@ exports.agendaApi = onRequest({
 
       if (!novoPedidoPublico) throw new Error("NAO_AUTORIZADO");
 
-      const resultado = await sincronizarPedidoComAgenda(pedidoId, "form_publico");
+      const resultado = await sincronizarGrupoPorPedidoId(pedidoId, "form_publico");
       sendJson(res, 200, resultado);
       return;
     }
@@ -1815,7 +2004,7 @@ exports.agendaApi = onRequest({
     await exigirAdminAgenda(req);
 
     if (acao === "AGENDA_SINCRONIZAR_PEDIDO") {
-      const resultado = await sincronizarPedidoComAgenda(String(body.pedidoId || ""), "painel");
+      const resultado = await sincronizarGrupoPorPedidoId(String(body.pedidoId || ""), "painel");
       sendJson(res, 200, resultado);
       return;
     }
@@ -1861,10 +2050,16 @@ exports.sincronizarAgendaPedido = onDocumentWritten({
     const after = afterSnap.data();
     const before = beforeSnap?.exists ? beforeSnap.data() : null;
 
-    const patchEstagio = patchDatasEstagio(before || {}, after);
-    if (Object.keys(patchEstagio).length) {
-      await afterSnap.ref.set(patchEstagio, { merge: true });
+    const patch = {
+      ...patchDatasEstagio(before || {}, after),
+      ...patchAtendimentoPedido(before || {}, after),
+    };
+    if (Object.keys(patch).length) {
+      await afterSnap.ref.set(patch, { merge: true });
     }
+
+    const afterNormalizado = { ...after, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => typeof value === "string")) };
+    await propagarCamposGrupoDoPrincipal(pedidoId, before || {}, afterNormalizado);
 
     if (before && !camposAgendaMudaram(before, after)) return;
     await sincronizarPedidoComAgenda(pedidoId, "gatilho_firestore");
@@ -1894,6 +2089,7 @@ exports.notificarNovoOrcamento = onDocumentCreated({
   if (!snap) return;
 
   const pedido = snap.data();
+  if (pedido.ehSubevento) return;
   if (pedido.status !== "PRE_RESERVA") return;
 
   await enviarPushPedido(pedido, event.params.pedidoId, snap.ref, "NOVO_PEDIDO");
@@ -1911,6 +2107,7 @@ exports.notificarAtualizacoesPedido = onDocumentWritten({
 
   const before = beforeSnap.data();
   const after = afterSnap.data();
+  if (after.ehSubevento) return;
   if (["REPROVADO", "LIXEIRA"].includes(after.status)) return;
 
   const contratoEntrou = (campoEntrou(before, after, "dadosContrato") || campoEntrou(before, after, "linkContrato"))

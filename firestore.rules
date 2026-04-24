@@ -29,6 +29,9 @@ service cloud.firestore {
           'valor',
           'valorPago',
           'statusPgto',
+          'origem',
+          'dataInsercaoLead',
+          'data_insercao_lead',
           'criadoEm'
         ])
         && request.resource.data.keys().hasAll([
@@ -91,6 +94,12 @@ service cloud.firestore {
         && request.resource.data.valor == 0
         && request.resource.data.valorPago == 0
         && request.resource.data.statusPgto == 'PENDENTE'
+        && (!request.resource.data.keys().hasAny(['origem'])
+          || request.resource.data.origem == 'form_orcamento_publico')
+        && (!request.resource.data.keys().hasAny(['dataInsercaoLead'])
+          || request.resource.data.dataInsercaoLead == request.time)
+        && (!request.resource.data.keys().hasAny(['data_insercao_lead'])
+          || request.resource.data.data_insercao_lead == request.time)
         && request.resource.data.criadoEm == request.time;
     }
 
