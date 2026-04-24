@@ -30,6 +30,7 @@ function doPost(e) {
 
   try {
     if (req.acao === "SALVAR_ARQUIVO") res = salvarArquivoDrive(req);
+    else if (req.acao === "ENVIAR_EMAIL_ORCAMENTO_PRONTO") res = enviarEmailOrcamentoPronto(req);
     else if (req.acao === "GERAR_PDF_ORCAMENTO") res = gerarPdfOrcamento(req);
     else if (req.acao === "GERAR_PDF_CONTRATO") res = gerarPdfContrato(req);
     
@@ -152,61 +153,382 @@ function salvarArquivoDrive(req) {
   
   const data = Utilities.base64Decode(req.base64.split(',')[1]);
   const blob = Utilities.newBlob(data, req.mimeType, req.filename);
-  const folder = DriveApp.getFolderById(CONFIG.PASTA_COMPROVANTES_ID);
+  const destino = String(req.destino || '').trim().toUpperCase();
+  const folderId = destino === 'ORCAMENTOS'
+    ? CONFIG.PASTA_DESTINO_ID
+    : String(req.folderId || CONFIG.PASTA_COMPROVANTES_ID);
+  const folder = DriveApp.getFolderById(folderId);
   const file = folder.createFile(blob);
   
-  return { success: true, url: file.getUrl() };
+return { success: true, url: file.getUrl() };
 }
 
-function gerarPdfOrcamento(dados) {
-  const folder = DriveApp.getFolderById(CONFIG.PASTA_DESTINO_ID);
-  const templateId = parseInt(dados.convidados) >= 80 ? CONFIG.IDS_TEMPLATES_ORCAMENTO.COM_RIDER : CONFIG.IDS_TEMPLATES_ORCAMENTO.SEM_RIDER;
-  
+function blobFromBase64Attachment(attachment) {
+  const raw = String(attachment && attachment.base64 || '');
+  if (!raw) return null;
+  const mimeType = String(attachment && attachment.mimeType || 'application/octet-stream');
+  const filename = String(attachment && attachment.filename || 'arquivo');
+  const base64 = raw.indexOf(',') >= 0 ? raw.split(',')[1] : raw;
+  const bytes = Utilities.base64Decode(base64);
+  return Utilities.newBlob(bytes, mimeType, filename);
+}
+
+function enviarEmailOrcamentoPronto(req) {
+  const email = String(req.email || '').trim();
+  if (!email) throw new Error('E-mail do cliente nao informado.');
+
+  const cliente = String(req.cliente || 'cliente').trim();
+  const cidade = String(req.cidade || '').trim();
+  const uf = String(req.uf || '').trim();
+  const tipo = String(req.tipo || 'evento').trim();
+  const datasResumo = String(req.datasResumo || '').trim();
+  const valorTexto = String(req.valorTexto || '').trim();
+  const pdfUrl = String(req.pdfUrl || '').trim();
+  const temRider = Boolean(req.temRider);
+  const anexos = Array.isArray(req.attachments)
+    ? req.attachments.map(blobFromBase64Attachment).filter(Boolean)
+    : [];
+
+  const assunto = datasResumo ? `Orcamento Jazz Cinnamon - ${datasResumo}` : `Orcamento Jazz Cinnamon - ${cliente}`;
+  const localTexto = [cidade, uf].filter(Boolean).join(' - ');
+  const riderTexto = temRider
+    ? '<p style="font-size: 14px; line-height: 1.6;">O rider tecnico da banda tambem segue anexo para sua conferencia.</p>'
+    : '';
+  const linkPdfHtml = pdfUrl
+    ? `<p style="font-size: 14px; line-height: 1.6;">Se preferir, voce tambem pode acessar o PDF por este link: <a href="${pdfUrl}">${pdfUrl}</a></p>`
+    : '';
+
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
+      <p>Ola <b>${cliente}</b>,</p>
+      <p style="font-size: 14px; line-height: 1.6;">
+        Segue em anexo o orcamento da Jazz Cinnamon para ${tipo ? `<b>${tipo.toLowerCase()}</b>` : 'seu evento'}
+        ${datasResumo ? ` nas datas <b>${datasResumo}</b>` : ''}${localTexto ? `, em <b>${localTexto}</b>` : ''}.
+      </p>
+      ${valorTexto ? `<p style="font-size: 14px; line-height: 1.6;">Valor do orcamento: <b>${valorTexto}</b></p>` : ''}
+      ${riderTexto}
+      ${linkPdfHtml}
+      <p style="font-size: 14px; line-height: 1.6;">Qualquer duvida, fico a disposicao pelo WhatsApp (54) 99175-8831.</p>
+      <br>
+      <p>Atenciosamente,</p>
+      <p><b>Luciano Souza</b><br>Jazz Cinnamon</p>
+    </div>
+  `;
+
+  MailApp.sendEmail({
+    to: email,
+    bcc: CONFIG.EMAIL_NOTIFICACAO,
+    subject: assunto,
+    htmlBody: htmlBody,
+    attachments: anexos
+  });
+
+  return { success: true, enviado: true };
+}
+
+function pad2(valor) {
+  return String(valor || 0).padStart(2, '0');
+}
+
+function sanitizarNomeArquivo(valor) {
+  return String(valor || 'Cliente').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function obterPastaDriveOuFalhar(folderId, contexto) {
+  try {
+    return DriveApp.getFolderById(folderId);
+  } catch (error) {
+    throw new Error(`${contexto}: pasta inacessivel no Drive (${folderId}). ${error}`);
+  }
+}
+
+function obterArquivoDriveOuFalhar(fileId, contexto) {
+  try {
+    return DriveApp.getFileById(fileId);
+  } catch (error) {
+    throw new Error(`${contexto}: arquivo/template inacessivel no Drive (${fileId}). ${error}`);
+  }
+}
+
+function montarListaNatural(itens) {
+  const lista = (itens || []).filter(Boolean);
+  if (!lista.length) return "";
+  if (lista.length === 1) return lista[0];
+  if (lista.length === 2) return `${lista[0]} e ${lista[1]}`;
+  return `${lista.slice(0, -1).join(', ')} e ${lista[lista.length - 1]}`;
+}
+
+function montarDataEventoNormalizada(ano, mes, dia) {
+  const meses = ["janeiro","fevereiro","marco","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+  const data = new Date(ano, mes - 1, dia, 12, 0, 0, 0);
+  return {
+    ano,
+    mes,
+    dia,
+    iso: `${ano}-${pad2(mes)}-${pad2(dia)}`,
+    ptBr: `${pad2(dia)}/${pad2(mes)}/${ano}`,
+    extenso: `${dia} de ${meses[mes - 1]} de ${ano}`,
+    mesNome: meses[mes - 1],
+    timestamp: data.getTime()
+  };
+}
+
+function parseDataEventoFlex(valor) {
+  const bruto = String(valor || '').trim().split(' ')[0];
+  if (!bruto) return null;
+
+  let match = bruto.match(/^(\d{4})[-\/](\d{2})[-\/](\d{2})$/);
+  if (match) return montarDataEventoNormalizada(Number(match[1]), Number(match[2]), Number(match[3]));
+
+  match = bruto.match(/^(\d{2})[-\/](\d{2})[-\/](\d{4})$/);
+  if (match) return montarDataEventoNormalizada(Number(match[3]), Number(match[2]), Number(match[1]));
+
+  return null;
+}
+
+function normalizarDuracaoResumo(valor) {
+  const bruto = String(valor || '').trim();
+  if (!bruto) return "A definir";
+  if (!bruto.includes(':')) return bruto;
+
+  const partes = bruto.split(':').map(Number);
+  const horas = Number(partes[0] || 0);
+  const minutos = Number(partes[1] || 0);
+
+  if (!horas && !minutos) return "A definir";
+  if (!minutos) return `${horas}h`;
+  return `${horas}h${pad2(minutos)}`;
+}
+
+function coletarApresentacoesOrcamento(dados) {
+  const origem = Array.isArray(dados.apresentacoesGrupo) && dados.apresentacoesGrupo.length
+    ? dados.apresentacoesGrupo
+    : [{
+        pedidoId: dados.id || "",
+        ordem: 1,
+        dataStr: dados.dataStr,
+        horaInicio: dados.horaInicio,
+        duracao: dados.duracao,
+        horaTermino: dados.horaTermino,
+        statusAgenda: dados.statusAgenda,
+        ehPrincipal: true
+      }];
+
+  const apresentacoes = origem.map((item, indice) => {
+    const dataInfo = parseDataEventoFlex(item.dataStr || item.data || dados.dataStr);
+    if (!dataInfo) return null;
+
+    return {
+      pedidoId: item.pedidoId || "",
+      ordem: Number(item.ordem || (indice + 1)),
+      dataStr: item.dataStr || item.data || dados.dataStr || "",
+      dataIso: dataInfo.iso,
+      dataPtBr: dataInfo.ptBr,
+      dataExtenso: dataInfo.extenso,
+      dia: dataInfo.dia,
+      mes: dataInfo.mes,
+      ano: dataInfo.ano,
+      mesNome: dataInfo.mesNome,
+      timestamp: dataInfo.timestamp,
+      horaInicio: String(item.horaInicio || dados.horaInicio || '').trim(),
+      horaTermino: String(item.horaTermino || dados.horaTermino || '').trim(),
+      duracao: String(item.duracao || dados.duracao || '').trim(),
+      duracaoResumo: normalizarDuracaoResumo(item.duracao || dados.duracao),
+      statusAgenda: String(item.statusAgenda || dados.statusAgenda || 'LIVRE').trim().toUpperCase(),
+      ehPrincipal: Boolean(item.ehPrincipal || indice === 0)
+    };
+  }).filter(Boolean);
+
+  apresentacoes.sort((a, b) => {
+    if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+    if (a.horaInicio !== b.horaInicio) return String(a.horaInicio || '').localeCompare(String(b.horaInicio || ''));
+    return a.ordem - b.ordem;
+  });
+
+  return apresentacoes.map((item, indice) => ({
+    ...item,
+    ordem: Number(item.ordem || (indice + 1))
+  }));
+}
+
+function obterStatusAgendaGeralOrcamento(apresentacoes, fallback) {
+  const prioridades = { LIVRE: 1, PENDENTE: 2, CONCORRENCIA: 2, OCUPADO: 3 };
+  let pior = String(fallback || 'LIVRE').trim().toUpperCase();
+
+  (apresentacoes || []).forEach((item) => {
+    const atual = String(item.statusAgenda || '').trim().toUpperCase();
+    if ((prioridades[atual] || 0) > (prioridades[pior] || 0)) pior = atual;
+  });
+
+  return pior;
+}
+
+function obterTextoDisponibilidadeOrcamento(statusAgenda) {
+  const status = String(statusAgenda || 'LIVRE').trim().toUpperCase();
+  if (status === 'LIVRE') return 'DATA LIVRE NA AGENDA - DISPONIVEL';
+  if (status === 'CONCORRENCIA' || status === 'PENDENTE') return 'DATA COM PRE-RESERVAS EM ANDAMENTO - AGUARDANDO CONFIRMACAO';
+  return 'DATA COM EVENTO CONFIRMADO - SUJEITO A ANALISE DE HORARIO/LOGISTICA';
+}
+
+function resumirDatasApresentacoes(apresentacoes) {
+  const unicas = [];
+  const mapa = {};
+
+  (apresentacoes || []).forEach((item) => {
+    if (!item || !item.dataIso || mapa[item.dataIso]) return;
+    mapa[item.dataIso] = true;
+    unicas.push(item);
+  });
+
+  if (!unicas.length) return '';
+  if (unicas.length === 1) return unicas[0].dataPtBr;
+
+  const mesmoMesAno = unicas.every((item) => item.mes === unicas[0].mes && item.ano === unicas[0].ano);
+  if (mesmoMesAno) {
+    const dias = unicas.map((item) => item.dia).sort((a, b) => a - b);
+    const consecutivos = dias.every((dia, indice) => indice === 0 || dia === dias[indice - 1] + 1);
+    if (consecutivos && dias.length > 1) {
+      return `de ${dias[0]} a ${dias[dias.length - 1]} de ${unicas[0].mesNome} de ${unicas[0].ano}`;
+    }
+    return `${montarListaNatural(dias.map(String))} de ${unicas[0].mesNome} de ${unicas[0].ano}`;
+  }
+
+  return montarListaNatural(unicas.map((item) => item.dataExtenso));
+}
+
+function resumirHorarioApresentacoes(apresentacoes) {
+  const horarios = Array.from(new Set((apresentacoes || []).map((item) => String(item.horaInicio || '').trim()).filter(Boolean)));
+  if (!horarios.length) return 'A definir';
+  if (horarios.length === 1) return horarios[0];
+  return (apresentacoes || [])
+    .map((item) => item.horaInicio ? `${item.dataPtBr} ${item.horaInicio}` : `${item.dataPtBr} a definir`)
+    .join(' | ');
+}
+
+function resumirDuracaoApresentacoes(apresentacoes) {
+  const duracoes = Array.from(new Set((apresentacoes || []).map((item) => item.duracaoResumo).filter(Boolean)));
+  if (!duracoes.length) return 'A definir';
+  if (duracoes.length === 1) return duracoes[0];
+  return (apresentacoes || [])
+    .map((item) => `${item.dataPtBr} ${item.duracaoResumo || 'a definir'}`)
+    .join(' | ');
+}
+
+function montarCronogramaApresentacoes(apresentacoes) {
+  return (apresentacoes || []).map((item, indice) => {
+    const partes = [
+      `Apresentacao ${indice + 1}: ${item.dataPtBr}`,
+      `inicio ${item.horaInicio || 'a definir'}`,
+      `duracao ${item.duracaoResumo || 'a definir'}`
+    ];
+    if (item.horaTermino) partes.push(`termino ${item.horaTermino}`);
+    return partes.join(' - ');
+  }).join('\n');
+}
+
+function aplicarCronogramaAoDocumento(body, apresentacoes) {
+  const marcadorCronograma = '{{CRONOGRAMA_APRESENTACOES}}';
+  const marcadorObs = '{{OBS_MULTIDATAS}}';
+
+  if (!apresentacoes || apresentacoes.length <= 1) {
+    if (body.getText().indexOf(marcadorCronograma) !== -1) body.replaceText(marcadorCronograma, '');
+    if (body.getText().indexOf(marcadorObs) !== -1) body.replaceText(marcadorObs, '');
+    return;
+  }
+
+  const cronograma = montarCronogramaApresentacoes(apresentacoes);
+  const observacao = `Proposta referente a ${apresentacoes.length} apresentacoes vinculadas ao mesmo evento.`;
+
+  if (body.getText().indexOf(marcadorCronograma) !== -1) {
+    body.replaceText(marcadorCronograma, cronograma);
+  }
+
+  if (body.getText().indexOf(marcadorObs) !== -1) {
+    body.replaceText(marcadorObs, observacao);
+  }
+}
+
+function gerarPdfOrcamentoMultiplo(dados) {
+  const temRider = parseInt(dados.convidados, 10) >= 80;
+  const templateId = temRider ? CONFIG.IDS_TEMPLATES_ORCAMENTO.COM_RIDER : CONFIG.IDS_TEMPLATES_ORCAMENTO.SEM_RIDER;
+  const apresentacoes = coletarApresentacoesOrcamento(dados);
+  const principal = apresentacoes[0] || null;
+  const folder = obterPastaDriveOuFalhar(CONFIG.PASTA_DESTINO_ID, 'Geracao do orcamento');
+  const templateFile = obterArquivoDriveOuFalhar(templateId, temRider ? 'Template COM_RIDER' : 'Template SEM_RIDER');
+
   let versaoStr = dados.versaoDoc > 0 ? ` (${dados.versaoDoc})` : "";
-  const nomeArquivo = `ORÇAMENTO JAZZ CINNAMON - ${dados.cliente}${versaoStr}`;
-  
-  const copia = DriveApp.getFileById(templateId).makeCopy(nomeArquivo, folder);
-  const doc = DocumentApp.openById(copia.getId());
+  const nomeArquivo = `ORÇAMENTO JAZZ CINNAMON - ${sanitizarNomeArquivo(dados.cliente)}${versaoStr}`;
+
+  let copia;
+  try {
+    copia = templateFile.makeCopy(nomeArquivo, folder);
+  } catch (error) {
+    throw new Error(`Falha ao copiar o template de orcamento para a pasta destino. Template: ${templateId} | Pasta: ${CONFIG.PASTA_DESTINO_ID}. ${error}`);
+  }
+
+  let doc;
+  try {
+    doc = DocumentApp.openById(copia.getId());
+  } catch (error) {
+    throw new Error(`Falha ao abrir a copia do template de orcamento (${copia.getId()}). ${error}`);
+  }
   const body = doc.getBody();
   const hoje = new Date();
-  const meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-  
-  let txtDisp = dados.statusAgenda === "LIVRE" ? "DATA LIVRE NA AGENDA - DISPONÍVEL" : 
-                dados.statusAgenda === "CONCORRENCIA" ? "DATA COM PRÉ-RESERVAS EM ANDAMENTO - AGUARDANDO CONFIRMAÇÃO" :
-                "DATA COM EVENTO CONFIRMADO - SUJEITO A ANÁLISE DE HORÁRIO/LOGÍSTICA";
+  const meses = ["Janeiro","Fevereiro","Marco","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  const statusAgendaGeral = obterStatusAgendaGeralOrcamento(apresentacoes, dados.statusAgenda);
+  const txtDisp = obterTextoDisponibilidadeOrcamento(statusAgendaGeral);
 
-  let valorNumerico = parseFloat(dados.valor || 0);
-  let valorFormatado = valorNumerico.toLocaleString('pt-BR', {minimumFractionDigits: 2});
-  let extenso = valorPorExtenso(valorNumerico);
-  let valorFinalComExtenso = `R$ ${valorFormatado} (${extenso})`;
+  const valorNumerico = parseFloat(dados.valor || 0);
+  const valorFormatado = valorNumerico.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+  const extenso = valorPorExtenso(valorNumerico);
+  const valorFinalComExtenso = `R$ ${valorFormatado} (${extenso})`;
 
-  const dataValidade = new Date(); dataValidade.setDate(hoje.getDate() + 10);
+  const dataValidade = new Date();
+  dataValidade.setDate(hoje.getDate() + 10);
   const textoValidade = `${dataValidade.getDate()} de ${meses[dataValidade.getMonth()]} de ${dataValidade.getFullYear()}`;
+  const textoDatasResumo = resumirDatasApresentacoes(apresentacoes) || (principal ? principal.dataPtBr : String(dados.dataStr || ''));
+  const textoHoraResumo = resumirHorarioApresentacoes(apresentacoes) || String(dados.horaInicio || '');
+  const textoDuracaoResumo = resumirDuracaoApresentacoes(apresentacoes) || String(dados.duracao || '');
+  const dataPrincipalPtBr = principal ? principal.dataPtBr : textoDatasResumo;
+  const dataAssuntoEmail = apresentacoes.length > 1 ? `${dataPrincipalPtBr} e outras datas` : dataPrincipalPtBr;
+  const trechoDatasEmail = apresentacoes.length > 1
+    ? `para os dias <b>${textoDatasResumo}</b>`
+    : `para o dia <b>${dataPrincipalPtBr}</b>`;
 
-  let dataPtBr = String(dados.dataStr);
-  if (dataPtBr.includes('-')) dataPtBr = dataPtBr.split('-').reverse().join('/');
-
-  body.replaceText('{{Nome Completo / Empresa}}', dados.cliente);
-  body.replaceText('{{Tipo de Evento}}', dados.tipo);
-  body.replaceText('{{Local}}', `${dados.local} - ${dados.cidade}/${dados.uf}`);
-  body.replaceText('{{Num_CONV}}', dados.convidados);
-  body.replaceText('{{Dia do Evento}}', dataPtBr);
-  body.replaceText('{{HORA_INICIO}}', dados.horaInicio);
-  body.replaceText('{{VALOR}}', valorFinalComExtenso); 
+  body.replaceText('{{Nome Completo / Empresa}}', String(dados.cliente || ''));
+  body.replaceText('{{Tipo de Evento}}', String(dados.tipo || ''));
+  body.replaceText('{{Local}}', [String(dados.local || '').trim(), [String(dados.cidade || '').trim(), String(dados.uf || '').trim()].filter(Boolean).join('/')].filter(Boolean).join(' - '));
+  body.replaceText('{{Num_CONV}}', String(dados.convidados || ''));
+  body.replaceText('{{Dia do Evento}}', textoDatasResumo);
+  body.replaceText('{{HORA_INICIO}}', textoHoraResumo);
+  body.replaceText('{{VALOR}}', valorFinalComExtenso);
   body.replaceText('{{DATA_GERACAO_ORCAMENTO}}', `${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${hoje.getFullYear()}`);
-  body.replaceText('{{VALIDADE_ORCAMENTO}}', textoValidade); 
-  body.replaceText('{{DURACAO_EVENTO}}', dados.duracao);
+  body.replaceText('{{VALIDADE_ORCAMENTO}}', textoValidade);
+  body.replaceText('{{DURACAO_EVENTO}}', textoDuracaoResumo);
   body.replaceText('{{Disponibilidade DATA}}', txtDisp);
-  
+  aplicarCronogramaAoDocumento(body, apresentacoes);
+
   doc.saveAndClose();
-  const pdf = folder.createFile(copia.getAs('application/pdf'));
+  let pdf;
+  try {
+    pdf = folder.createFile(copia.getAs('application/pdf'));
+  } catch (error) {
+    throw new Error(`Falha ao exportar o PDF do orcamento para a pasta destino (${CONFIG.PASTA_DESTINO_ID}). ${error}`);
+  }
 
   if(dados.enviarEmail !== false && dados.email) {
-    const htmlEmail = `<div style="font-family: Arial, sans-serif; color: #333; max-width: 600px;"><p>Olá <b>${dados.cliente}</b>,</p><p>Segue em anexo o orçamento que solicitou através do nosso sistema para seu evento no dia <b>${dataPtBr}</b>, em <b>${dados.cidade}-${dados.uf}</b>.</p><p>Oferecemos desconto para pagamento à vista no ato da assinatura do contrato.</p><p>Qualquer dúvida entre em contato através do whatsapp (54) 99175 8831, falar com Luciano.</p><br><p>Atenciosamente,</p><p><b>O JAZZ NOSSO DE CADA DIA</b><br>Cnpj: 50.322.210/0001-74</p></div>`;
-    MailApp.sendEmail({ to: dados.email, subject: `Orçamento Jazz Cinnamon - ${dataPtBr}`, htmlBody: htmlEmail, attachments: [pdf] });
+    const anexosEmail = [pdf];
+    const riderBlob = temRider ? blobFromBase64Attachment(dados.riderAttachment) : null;
+    if (riderBlob) anexosEmail.push(riderBlob);
+    const htmlEmail = `<div style="font-family: Arial, sans-serif; color: #333; max-width: 600px;"><p>Ola <b>${dados.cliente}</b>,</p><p>Segue em anexo o orcamento que solicitou atraves do nosso sistema ${trechoDatasEmail}, em <b>${dados.cidade}-${dados.uf}</b>.</p><p>Oferecemos desconto para pagamento a vista no ato da assinatura do contrato.</p><p>Qualquer duvida entre em contato atraves do whatsapp (54) 99175 8831, falar com Luciano.</p><br><p>Atenciosamente,</p><p><b>O JAZZ NOSSO DE CADA DIA</b><br>Cnpj: 50.322.210/0001-74</p></div>`;
+    MailApp.sendEmail({ to: dados.email, subject: `Orçamento Jazz Cinnamon - ${dataAssuntoEmail}`, htmlBody: htmlEmail, attachments: anexosEmail });
   }
 
   return { success: true, pdfUrl: pdf.getUrl(), docUrl: copia.getUrl(), enviado: dados.enviarEmail !== false };
+}
+
+function gerarPdfOrcamento(dados) {
+  return gerarPdfOrcamentoMultiplo(dados);
 }
 
 function gerarPdfContrato(dados) {

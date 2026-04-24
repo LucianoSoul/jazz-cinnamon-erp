@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emissão de Contrato - Jazz Cinnamon</title>
+    <title>Solicitação de Orçamento - Jazz Cinnamon</title>
     
     <!-- TAGS APP MOBILE MODE -->
     <meta name="mobile-web-app-capable" content="yes">
@@ -615,7 +615,7 @@
             else window.estadoAgenda = "LIVRE";
         };
 
-        document.getElementById('formCliente').onsubmit = async (e) => {
+        window.onsubmitLegadoFormularioOrcamento = async (e) => {
             e.preventDefault(); document.getElementById('btn-spinner').classList.remove('hidden');
             const docVal = document.getElementById('documento').value;
             const dataParts = document.getElementById('data_evento').value.split('-');
@@ -917,10 +917,30 @@
 
                 const pedidosRef = collection(db, "pedidos");
                 const principalRef = doc(pedidosRef);
-                const subRefs = apresentacoes.slice(1).map(() => doc(pedidosRef));
                 const grupoId = principalRef.id;
-                const statusAgendaGrupo = window.estadoAgenda || 'LIVRE';
-                const concorrentesGrupo = Array.isArray(window.concorrentesEncontrados) ? window.concorrentesEncontrados : [];
+                const subeventRefs = apresentacoes.slice(1).map(() => doc(pedidosRef));
+                const subeventosIds = subeventRefs.map((ref) => ref.id);
+                const apresentacoesGrupo = [
+                    {
+                        pedidoId: principalRef.id,
+                        ordem: 1,
+                        dataStr: apresentacoes[0].dataStr,
+                        horaInicio: apresentacoes[0].horaInicio,
+                        duracao: apresentacoes[0].duracao,
+                        horaTermino: apresentacoes[0].horaTermino,
+                        ehPrincipal: true
+                    },
+                    ...apresentacoes.slice(1).map((apres, indice) => ({
+                        pedidoId: subeventRefs[indice].id,
+                        ordem: apres.ordem,
+                        dataStr: apres.dataStr,
+                        horaInicio: apres.horaInicio,
+                        duracao: apres.duracao,
+                        horaTermino: apres.horaTermino,
+                        ehPrincipal: false
+                    }))
+                ];
+
                 const base = {
                     cliente,
                     documento: document.getElementById('documento').value,
@@ -942,60 +962,51 @@
                     data_insercao_lead: serverTimestamp(),
                     criadoEm: serverTimestamp(),
                     grupoId,
-                    eventoPrincipalId: principalRef.id,
+                    eventoPrincipalId: grupoId,
                     qtdApresentacoes: apresentacoes.length,
-                    temSubeventos: apresentacoes.length > 1
+                    temSubeventos: apresentacoes.length > 1,
+                    subeventosIds
                 };
 
-                const refsOrdenadas = [principalRef, ...subRefs];
-                const apresentacoesGrupo = apresentacoes.map((item, indice) => ({
-                    pedidoId: refsOrdenadas[indice].id,
-                    ordem: item.ordem,
-                    dataStr: item.dataStr,
-                    horaInicio: item.horaInicio,
-                    duracao: item.duracao,
-                    horaTermino: item.horaTermino,
-                    statusAgenda: item.statusAgenda,
-                    concorrentesQtd: Array.isArray(item.concorrentes) ? item.concorrentes.length : 0,
-                    ehPrincipal: indice === 0
-                }));
-
                 const batch = writeBatch(db);
-                const principalApresentacao = apresentacoes[0];
                 batch.set(principalRef, {
                     ...base,
-                    dataStr: principalApresentacao.dataStr,
-                    horaInicio: principalApresentacao.horaInicio,
-                    duracao: principalApresentacao.duracao,
-                    horaTermino: principalApresentacao.horaTermino,
-                    statusAgenda: statusAgendaGrupo,
-                    concorrentes: concorrentesGrupo,
+                    id: principalRef.id,
                     ehEventoPrincipal: true,
                     ehSubevento: false,
-                    subeventosIds: subRefs.map((ref) => ref.id),
+                    subeventoOrdem: 1,
+                    pedidoPrincipalFinanceiroId: principalRef.id,
+                    financeiroNoPrincipal: false,
+                    dataStr: apresentacoes[0].dataStr,
+                    horaInicio: apresentacoes[0].horaInicio,
+                    duracao: apresentacoes[0].duracao,
+                    horaTermino: apresentacoes[0].horaTermino,
+                    statusAgenda: apresentacoes[0].statusAgenda,
+                    concorrentes: apresentacoes[0].concorrentes,
                     apresentacoesGrupo
                 });
 
-                subRefs.forEach((ref, index) => {
-                    const apresentacao = apresentacoes[index + 1];
-                    batch.set(ref, {
+                apresentacoes.slice(1).forEach((apres, indice) => {
+                    batch.set(subeventRefs[indice], {
                         ...base,
-                        dataStr: apresentacao.dataStr,
-                        horaInicio: apresentacao.horaInicio,
-                        duracao: apresentacao.duracao,
-                        horaTermino: apresentacao.horaTermino,
-                        statusAgenda: apresentacao.statusAgenda,
-                        concorrentes: apresentacao.concorrentes,
+                        id: subeventRefs[indice].id,
                         origem: "form_orcamento_publico_subevento",
                         ehEventoPrincipal: false,
                         ehSubevento: true,
-                        subeventoOrdem: apresentacao.ordem,
+                        subeventoOrdem: apres.ordem,
                         pedidoPrincipalFinanceiroId: principalRef.id,
-                        financeiroNoPrincipal: true
+                        financeiroNoPrincipal: true,
+                        dataStr: apres.dataStr,
+                        horaInicio: apres.horaInicio,
+                        duracao: apres.duracao,
+                        horaTermino: apres.horaTermino,
+                        statusAgenda: apres.statusAgenda,
+                        concorrentes: apres.concorrentes
                     });
                 });
 
                 await batch.commit();
+
                 document.getElementById('formCliente').classList.add('hidden');
                 document.getElementById('sucesso-cliente').classList.remove('hidden');
             } catch (err) {

@@ -102,12 +102,56 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const provider = new GoogleAuthProvider();
-        const ADMIN_EMAILS = ["luciano.cinnamon@gmail.com"];
-
-        const isAdminUser = (user) => {
-            const emailUsuario = (user?.email || "").toLowerCase();
-            return !!user && !user.isAnonymous && ADMIN_EMAILS.includes(emailUsuario);
+        const ACCESS_EMAILS = {
+            admin: ["luciano.cinnamon@gmail.com"],
+            producao: ["sergiodobass@gmail.com"]
         };
+        const nextParam = new URLSearchParams(window.location.search).get("next") || "";
+
+        const rotaInternaSegura = (raw) => {
+            const valor = String(raw || "").trim();
+            if (!valor) return "painel_erp.html";
+            if (valor.startsWith("http://") || valor.startsWith("https://") || valor.startsWith("//")) return "painel_erp.html";
+            return valor.startsWith("/") ? valor.slice(1) : valor;
+        };
+
+        const rolesPorClaims = (claims = {}) => {
+            const roles = new Set();
+            const role = String(claims.role || "").trim().toLowerCase();
+            if (role === "admin" || role === "producao") roles.add(role);
+            if (claims.admin === true) roles.add("admin");
+            if (claims.producao === true) roles.add("producao");
+            if (Array.isArray(claims.roles)) {
+                claims.roles.forEach((item) => {
+                    const atual = String(item || "").trim().toLowerCase();
+                    if (atual === "admin" || atual === "producao") roles.add(atual);
+                });
+            }
+            return [...roles];
+        };
+
+        const rolePorEmail = (email = "") => {
+            const normalizado = String(email || "").trim().toLowerCase();
+            if (ACCESS_EMAILS.admin.includes(normalizado)) return "admin";
+            if (ACCESS_EMAILS.producao.includes(normalizado)) return "producao";
+            return "";
+        };
+
+        const obterPerfilAcesso = async (user) => {
+            if (!user || user.isAnonymous) return null;
+            const tokenResult = await user.getIdTokenResult();
+            const roles = rolesPorClaims(tokenResult.claims || {});
+            const fallback = rolePorEmail(user.email);
+            const role = roles[0] || fallback || "";
+            if (!role) return null;
+            return {
+                role,
+                email: String(user.email || "").toLowerCase(),
+                nome: user.displayName || user.email || "Usuario"
+            };
+        };
+
+        const destinoAposLogin = () => rotaInternaSegura(nextParam || "painel_erp.html");
 
         lucide.createIcons();
 
@@ -118,9 +162,10 @@
                 return;
             }
 
-            if (isAdminUser(user)) {
+            const perfil = await obterPerfilAcesso(user);
+            if (perfil) {
                 document.body.innerHTML = '<div class="min-h-screen flex flex-col items-center justify-center bg-[#0f1115]"><div class="w-10 h-10 border-4 border-[#2a2e39] border-t-[#d4af37] rounded-full animate-spin"></div><p class="mt-4 text-[#d4af37] font-bold uppercase tracking-widest text-xs">A Redirecionar...</p></div>';
-                window.location.replace('painel_erp.html');
+                window.location.replace(destinoAposLogin());
             } else if (user) {
                 await signOut(auth);
             }
@@ -155,8 +200,9 @@
             try {
                 // Removida a configuração forçada de persistência para evitar bloqueios em browsers mobile
                 const userCredential = await signInWithEmailAndPassword(auth, email.value.trim(), password.value.trim());
-                if (isAdminUser(userCredential.user)) {
-                    window.location.replace("painel_erp.html");
+                const perfil = await obterPerfilAcesso(userCredential.user);
+                if (perfil) {
+                    window.location.replace(destinoAposLogin());
                 } else {
                     await signOut(auth);
                     throw { code: "auth/not-admin" };
@@ -188,8 +234,9 @@
             btnGoogle.disabled = true;
             try {
                 const result = await signInWithPopup(auth, provider);
-                if (isAdminUser(result.user)) {
-                    window.location.replace("painel_erp.html");
+                const perfil = await obterPerfilAcesso(result.user);
+                if (perfil) {
+                    window.location.replace(destinoAposLogin());
                 } else {
                     await signOut(auth);
                     Swal.fire({ icon: "error", title: "Acesso Negado", text: "Este Google não está autorizado para acessar o ERP.", background: "#1a1d24", color: "#fff", confirmButtonColor: "#d4af37" });

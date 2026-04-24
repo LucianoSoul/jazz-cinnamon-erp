@@ -2,13 +2,65 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isAdmin() {
+    function isSignedUser() {
       return request.auth != null
-        && request.auth.token.email in ['luciano.cinnamon@gmail.com']
         && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
-    function isPublicPedidoCreate() {
+    function hasClaimRole(role) {
+      return isSignedUser()
+        && (
+          request.auth.token.role == role
+          || (role == 'admin' && request.auth.token.admin == true)
+          || (role == 'producao' && request.auth.token.producao == true)
+          || (request.auth.token.roles is list && request.auth.token.roles.hasAny([role]))
+        );
+    }
+
+    function isAdmin() {
+      return isSignedUser()
+        && (
+          hasClaimRole('admin')
+          || request.auth.token.email in ['luciano.cinnamon@gmail.com']
+        );
+    }
+
+    function isProducao() {
+      return isSignedUser()
+        && (
+          hasClaimRole('producao')
+          || request.auth.token.email in ['sergiodobass@gmail.com']
+        );
+    }
+
+    function isSystemUser() {
+      return isAdmin() || isProducao();
+    }
+
+    function isOwnPedidoWriter() {
+      return isSystemUser()
+        && (
+          (resource.data.ownerUid is string && resource.data.ownerUid == request.auth.uid)
+          || (resource.data.createdByUid is string && resource.data.createdByUid == request.auth.uid)
+          || (resource.data.criadorUid is string && resource.data.criadorUid == request.auth.uid)
+          || (resource.data.ownerEmail is string && resource.data.ownerEmail == request.auth.token.email)
+          || (resource.data.criadorEmail is string && resource.data.criadorEmail == request.auth.token.email)
+          || (resource.data.origemCriadorEmail is string && resource.data.origemCriadorEmail == request.auth.token.email)
+        );
+    }
+
+    function isOwnPushSubscriptionWriter() {
+      return isSystemUser()
+        && request.resource.data.uid is string
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email is string
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role is string
+        && request.resource.data.role in ['admin', 'producao']
+        && request.resource.data.subscription is map;
+    }
+
+    function isPublicPedidoCreate(pedidoId) {
       return request.resource.data.keys().hasOnly([
           'cliente',
           'documento',
@@ -32,7 +84,21 @@ service cloud.firestore {
           'origem',
           'dataInsercaoLead',
           'data_insercao_lead',
-          'criadoEm'
+          'criadoEm',
+          'horaTermino',
+          'atendimento',
+          'grupoId',
+          'eventoPrincipalId',
+          'qtdApresentacoes',
+          'temSubeventos',
+          'subeventosIds',
+          'id',
+          'ehEventoPrincipal',
+          'ehSubevento',
+          'subeventoOrdem',
+          'pedidoPrincipalFinanceiroId',
+          'financeiroNoPrincipal',
+          'apresentacoesGrupo'
         ])
         && request.resource.data.keys().hasAll([
           'cliente',
@@ -76,6 +142,9 @@ service cloud.firestore {
         && request.resource.data.horaInicio.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$')
         && request.resource.data.duracao is string
         && request.resource.data.duracao.matches('^[0-9]+:[0-5][0-9]$')
+        && (!request.resource.data.keys().hasAny(['horaTermino'])
+          || (request.resource.data.horaTermino is string
+            && request.resource.data.horaTermino.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$')))
         && request.resource.data.cidade is string
         && request.resource.data.cidade.size() > 1
         && request.resource.data.cidade.size() <= 120
@@ -94,12 +163,52 @@ service cloud.firestore {
         && request.resource.data.valor == 0
         && request.resource.data.valorPago == 0
         && request.resource.data.statusPgto == 'PENDENTE'
+        && (!request.resource.data.keys().hasAny(['atendimento'])
+          || request.resource.data.atendimento == 'Luciano')
         && (!request.resource.data.keys().hasAny(['origem'])
-          || request.resource.data.origem == 'form_orcamento_publico')
+          || request.resource.data.origem in ['form_orcamento_publico', 'form_orcamento_publico_subevento'])
         && (!request.resource.data.keys().hasAny(['dataInsercaoLead'])
           || request.resource.data.dataInsercaoLead == request.time)
         && (!request.resource.data.keys().hasAny(['data_insercao_lead'])
           || request.resource.data.data_insercao_lead == request.time)
+        && (!request.resource.data.keys().hasAny(['grupoId'])
+          || (request.resource.data.grupoId is string
+            && request.resource.data.grupoId.size() >= 8
+            && request.resource.data.grupoId.size() <= 80))
+        && (!request.resource.data.keys().hasAny(['eventoPrincipalId'])
+          || (request.resource.data.eventoPrincipalId is string
+            && request.resource.data.eventoPrincipalId.size() >= 8
+            && request.resource.data.eventoPrincipalId.size() <= 80))
+        && (!request.resource.data.keys().hasAny(['qtdApresentacoes'])
+          || (request.resource.data.qtdApresentacoes is int
+            && request.resource.data.qtdApresentacoes >= 1
+            && request.resource.data.qtdApresentacoes <= 5))
+        && (!request.resource.data.keys().hasAny(['temSubeventos'])
+          || request.resource.data.temSubeventos is bool)
+        && (!request.resource.data.keys().hasAny(['subeventosIds'])
+          || (request.resource.data.subeventosIds is list
+            && request.resource.data.subeventosIds.size() <= 4))
+        && (!request.resource.data.keys().hasAny(['id'])
+          || (request.resource.data.id is string
+            && request.resource.data.id == pedidoId))
+        && (!request.resource.data.keys().hasAny(['ehEventoPrincipal'])
+          || request.resource.data.ehEventoPrincipal is bool)
+        && (!request.resource.data.keys().hasAny(['ehSubevento'])
+          || request.resource.data.ehSubevento is bool)
+        && (!request.resource.data.keys().hasAny(['subeventoOrdem'])
+          || (request.resource.data.subeventoOrdem is int
+            && request.resource.data.subeventoOrdem >= 1
+            && request.resource.data.subeventoOrdem <= 5))
+        && (!request.resource.data.keys().hasAny(['pedidoPrincipalFinanceiroId'])
+          || (request.resource.data.pedidoPrincipalFinanceiroId is string
+            && request.resource.data.pedidoPrincipalFinanceiroId.size() >= 8
+            && request.resource.data.pedidoPrincipalFinanceiroId.size() <= 80))
+        && (!request.resource.data.keys().hasAny(['financeiroNoPrincipal'])
+          || request.resource.data.financeiroNoPrincipal is bool)
+        && (!request.resource.data.keys().hasAny(['apresentacoesGrupo'])
+          || (request.resource.data.apresentacoesGrupo is list
+            && request.resource.data.apresentacoesGrupo.size() >= 1
+            && request.resource.data.apresentacoesGrupo.size() <= 5))
         && request.resource.data.criadoEm == request.time;
     }
 
@@ -148,16 +257,22 @@ service cloud.firestore {
     }
 
     match /pedidos/{pedidoId} {
-      allow get: if isAdmin()
+      allow get: if isSystemUser()
         || !exists(/databases/$(database)/documents/pedidos/$(pedidoId))
         || isPublicLinkedPedido();
-      allow list: if isAdmin();
-      allow create: if isAdmin() || isPublicPedidoCreate();
+      allow list: if isSystemUser();
+      allow create: if isSystemUser() || isPublicPedidoCreate(pedidoId);
       allow update: if isAdmin()
+        || isOwnPedidoWriter()
         || isPublicContractPatch()
         || isPublicNfPatch()
         || isPublicContractAttachmentPatch();
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || isOwnPedidoWriter();
+    }
+
+    match /pedidos/{pedidoId}/logs/{logId} {
+      allow read: if isSystemUser();
+      allow write: if false;
     }
 
     match /disponibilidade_publica/{pedidoId} {
@@ -165,12 +280,28 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /producao_eventos/{pedidoId} {
+      allow read: if isSystemUser();
+      allow write: if false;
+    }
+
+    match /parceiros_som/{parceiroId} {
+      allow read: if isSystemUser();
+      allow write: if false;
+    }
+
+    match /security_events/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /links_publicos/{token} {
       allow read, write: if isAdmin();
     }
 
     match /push_subscriptions/{subscriptionId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
+      allow write: if isAdmin() || isOwnPushSubscriptionWriter();
     }
 
     match /{document=**} {

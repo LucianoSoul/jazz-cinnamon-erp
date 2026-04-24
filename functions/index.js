@@ -18,6 +18,7 @@ const VAPID_PRIVATE_KEY_SECRET = defineSecret("VAPID_PRIVATE_KEY");
 const DEFAULT_CALENDAR_ID = "77ee282b8071d0ae9ed2cfb27ef8260acb93c76bc27dc96a2efc60cf32445e43@group.calendar.google.com";
 const CALENDAR_TIME_ZONE = "America/Sao_Paulo";
 const ADMIN_EMAILS = ["luciano.cinnamon@gmail.com"];
+const PRODUCAO_EMAILS = ["sergiodobass@gmail.com"];
 
 const STATUS_AGENDA = {
   PRE_RESERVA: { sufixo: "PRE-RESERVA", colorId: "7" },
@@ -62,6 +63,266 @@ function atendimentoPedidoPadrao(pedido = {}) {
   if (criadorEmail || criadorNome) return atendimentoPorCriadorAgenda(criadorEmail, criadorNome);
 
   return "Luciano";
+}
+
+function rolePorEmail(email = "") {
+  const normalizado = String(email || "").trim().toLowerCase();
+  if (ADMIN_EMAILS.includes(normalizado)) return "admin";
+  if (PRODUCAO_EMAILS.includes(normalizado)) return "producao";
+  return "";
+}
+
+function rolesPorClaims(claims = {}) {
+  const roles = new Set();
+  const role = String(claims.role || "").trim().toLowerCase();
+  if (role === "admin" || role === "producao") roles.add(role);
+  if (claims.admin === true) roles.add("admin");
+  if (claims.producao === true) roles.add("producao");
+  if (Array.isArray(claims.roles)) {
+    claims.roles.forEach((item) => {
+      const atual = String(item || "").trim().toLowerCase();
+      if (atual === "admin" || atual === "producao") roles.add(atual);
+    });
+  }
+  return [...roles];
+}
+
+function resolverRoleUsuario(decoded = {}) {
+  const roles = rolesPorClaims(decoded);
+  if (roles.length) return roles[0];
+  return rolePorEmail(decoded.email || "");
+}
+
+function nomeUsuarioSistema(decoded = {}) {
+  const role = resolverRoleUsuario(decoded);
+  if (decoded.name) return String(decoded.name).trim();
+  if (decoded.email) {
+    const email = String(decoded.email).trim().toLowerCase();
+    if (email === "luciano.cinnamon@gmail.com") return "Luciano";
+    if (email === "sergiodobass@gmail.com") return "Serginho";
+  }
+  return role === "producao" ? "Produção" : "Admin";
+}
+
+function obterIpRequisicao(req) {
+  const forwarded = String(req.get("x-forwarded-for") || "").split(",")[0].trim();
+  return forwarded || req.ip || "";
+}
+
+function valorTextoSeguro(value, fallback = "") {
+  return String(value ?? "").trim() || fallback;
+}
+
+function valorTextoOuVazio(value) {
+  return String(value ?? "").trim();
+}
+
+function tituloCaseSimples(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
+function linkFichaProducao(pedidoId = "") {
+  const pedido = String(pedidoId || "").trim();
+  if (!pedido) return "";
+  try {
+    const url = new URL(env("PANEL_URL", DEFAULT_PANEL_URL));
+    url.searchParams.set("view", "producao");
+    url.searchParams.set("pedido", pedido);
+    return url.toString();
+  } catch (error) {
+    const base = env("PANEL_URL", DEFAULT_PANEL_URL);
+    const separador = base.includes("?") ? "&" : "?";
+    return `${base}${separador}view=producao&pedido=${encodeURIComponent(pedido)}`;
+  }
+}
+
+function normalizarWhatsAppBr(value = "") {
+  return String(value || "").replace(/\D/g, "").slice(0, 13);
+}
+
+function normalizarTimeCurto(value = "") {
+  const raw = String(value || "").trim();
+  return /^([01]?\d|2[0-3]):([0-5]\d)$/.test(raw) ? raw : "";
+}
+
+function normalizarSimNao(value = "") {
+  const raw = normalizarTextoBusca(value);
+  if (["S", "SIM", "TRUE"].includes(raw)) return "S";
+  return "N";
+}
+
+function normalizarSonorizacao(value = "") {
+  const raw = normalizarTextoBusca(value).toLowerCase();
+  return raw === "propria" ? "propria" : "terceirizada";
+}
+
+function normalizarBateria(value = "") {
+  const raw = normalizarTextoBusca(value).toLowerCase();
+  return raw === "eletronica" ? "eletronica" : "acustica";
+}
+
+function normalizarTraje(value = "") {
+  const raw = normalizarTextoBusca(value).toLowerCase();
+  return raw === "normal" ? "NORMAL" : "SOCIAL";
+}
+
+function normalizarLocalMapsUrl(value = "") {
+  const raw = valorTextoSeguro(value);
+  if (!raw) return "";
+
+  if (/^https?:\/\//i.test(raw)) return raw;
+
+  if (/^(maps\.app\.goo\.gl|goo\.gl\/maps|www\.google\.com\/maps|google\.com\/maps|maps\.google\.com)\b/i.test(raw)) {
+    return `https://${raw}`;
+  }
+
+  if (/^[\w.-]+\.[a-z]{2,}(?:[\/?#].*)?$/i.test(raw)) {
+    return `https://${raw}`;
+  }
+
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(raw)}`;
+}
+
+function producaoEventoDefault(pedidoId, pedido = {}, existente = {}) {
+  return {
+    pedidoId,
+    clienteSnapshot: valorTextoSeguro(pedido.cliente || pedido.nome_contratante_formal),
+    dataEventoSnapshot: valorTextoSeguro(pedido.dataStr || pedido.data),
+    cidadeUfSnapshot: [pedido.cidade || "", pedido.uf || ""].filter(Boolean).join("-"),
+    horaShowInicioSnapshot: valorTextoSeguro(pedido.horaInicio),
+    horaShowFimSnapshot: valorTextoSeguro(pedido.horaTermino || calcularHoraTermino(pedido.horaInicio, pedido.duracao)),
+    localMapsUrl: normalizarLocalMapsUrl(existente.localMapsUrl || existente.localTexto),
+    camarim: normalizarSimNao(existente.camarim),
+    sonorizacaoTipo: normalizarSonorizacao(existente.sonorizacaoTipo),
+    empresaSomId: valorTextoSeguro(existente.empresaSomId),
+    empresaSomNome: valorTextoSeguro(existente.empresaSomNome),
+    responsavelNome: valorTextoSeguro(existente.responsavelNome),
+    responsavelWhatsapp: valorTextoSeguro(existente.responsavelWhatsapp),
+    horaPassagemSom: normalizarTimeCurto(existente.horaPassagemSom),
+    bateriaTipo: normalizarBateria(existente.bateriaTipo),
+    figurinoTraje: normalizarTraje(existente.figurinoTraje),
+    figurinoCor: valorTextoSeguro(existente.figurinoCor),
+    observacoes: valorTextoSeguro(existente.observacoes),
+  };
+}
+
+function producaoEventoPayload(body = {}, pedidoId, pedido = {}) {
+  return {
+    ...producaoEventoDefault(pedidoId, pedido, body),
+    localMapsUrl: normalizarLocalMapsUrl(body.localMapsUrl || body.localTexto),
+    camarim: normalizarSimNao(body.camarim),
+    sonorizacaoTipo: normalizarSonorizacao(body.sonorizacaoTipo),
+    empresaSomId: valorTextoSeguro(body.empresaSomId),
+    empresaSomNome: valorTextoSeguro(body.empresaSomNome),
+    responsavelNome: valorTextoSeguro(body.responsavelNome),
+    responsavelWhatsapp: normalizarWhatsAppBr(body.responsavelWhatsapp),
+    horaPassagemSom: normalizarTimeCurto(body.horaPassagemSom),
+    bateriaTipo: normalizarBateria(body.bateriaTipo),
+    figurinoTraje: normalizarTraje(body.figurinoTraje),
+    figurinoCor: valorTextoSeguro(body.figurinoCor),
+    observacoes: valorTextoSeguro(body.observacoes),
+  };
+}
+
+function campoMudou(before = {}, after = {}, campo) {
+  return JSON.stringify(before?.[campo] ?? null) !== JSON.stringify(after?.[campo] ?? null);
+}
+
+async function registrarLogsProducao(pedidoId, before = {}, after = {}, actor = {}) {
+  const campos = [
+    ["localMapsUrl", "Local"],
+    ["camarim", "Camarim"],
+    ["sonorizacaoTipo", "Sonorização"],
+    ["empresaSomNome", "Empresa"],
+    ["responsavelNome", "Responsável no evento"],
+    ["responsavelWhatsapp", "WhatsApp responsável"],
+    ["horaPassagemSom", "Hora passagem de som"],
+    ["bateriaTipo", "Bateria"],
+    ["figurinoTraje", "Traje"],
+    ["figurinoCor", "Cor figurino"],
+    ["observacoes", "Observações"],
+  ];
+
+  const batch = db.batch();
+  let mudou = false;
+  campos.forEach(([campo, label]) => {
+    if (!campoMudou(before, after, campo)) return;
+    mudou = true;
+    const ref = db.collection("pedidos").doc(pedidoId).collection("logs").doc();
+    const antes = valorTextoSeguro(before?.[campo], "vazio");
+    const depois = valorTextoSeguro(after?.[campo], "vazio");
+    batch.set(ref, {
+      type: "producao_change",
+      field: campo,
+      before: before?.[campo] ?? "",
+      after: after?.[campo] ?? "",
+      message: `${actor.nome || "Usuário"} alterou ${label} de "${antes}" para "${depois}"`,
+      actorUid: actor.uid || "",
+      actorEmail: actor.email || "",
+      actorName: actor.nome || "",
+      actorRole: actor.role || "",
+      source: "painel_producao",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+  if (mudou) await batch.commit();
+}
+
+async function carregarProducaoEvento(pedidoId, pedido = {}) {
+  if (!pedidoId) return null;
+  const snap = await db.collection("producao_eventos").doc(pedidoId).get();
+  if (!snap.exists) return producaoEventoDefault(pedidoId, pedido, {});
+  return {
+    ...producaoEventoDefault(pedidoId, pedido, snap.data()),
+    ...snap.data(),
+  };
+}
+
+async function listarParceirosSom() {
+  const snapshot = await db.collection("parceiros_som").orderBy("nomeNormalizado").get();
+  return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+}
+
+function nomeNormalizadoParceiro(nome = "") {
+  return normalizarTextoBusca(nome).toLowerCase();
+}
+
+async function registrarTentativaAcessoProducao(req, pedidoId = "", decoded = null) {
+  const role = resolverRoleUsuario(decoded || {});
+  const payload = {
+    type: "unauthorized_magic_link",
+    pedidoId: String(pedidoId || "").trim(),
+    uid: decoded?.uid || "",
+    email: String(decoded?.email || "").toLowerCase(),
+    role,
+    ip: obterIpRequisicao(req),
+    userAgent: String(req.get("user-agent") || ""),
+    path: String(req.originalUrl || req.url || ""),
+    source: "link_producao",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  await db.collection("security_events").add(payload);
+
+  if (payload.pedidoId) {
+    await db.collection("pedidos").doc(payload.pedidoId).collection("logs").add({
+      type: "security",
+      field: "producao_link_access",
+      before: "",
+      after: "",
+      message: `${payload.email || "Usuario nao autorizado"} tentou acessar a ficha de producao sem permissao.`,
+      actorUid: payload.uid,
+      actorEmail: payload.email,
+      actorName: nomeUsuarioSistema(decoded || {}),
+      actorRole: role,
+      source: "magic_link",
+      ip: payload.ip,
+      userAgent: payload.userAgent,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
 }
 
 const CAMPOS_RELEVANTES_AGENDA = [
@@ -245,14 +506,29 @@ function somarDiasData(parsed, dias) {
   };
 }
 
-function montarInicioFimAgenda(pedido) {
+function montarInicioFimAgenda(pedido, producao = null) {
   const parsed = parseDataEvento(pedido.dataStr || pedido.data);
   if (!parsed) throw new Error("DATA_EVENTO_INVALIDA");
 
-  const inicio = parseHorario(pedido.horaInicio || "19:00");
+  const inicioShow = parseHorario(pedido.horaInicio || "19:00");
+  const inicioShowMinutos = (inicioShow.hora * 60) + inicioShow.minuto;
   const duracaoMinutos = parseDuracaoMinutos(pedido.duracao, 120);
-  const inicioMinutos = (inicio.hora * 60) + inicio.minuto;
-  const fimTotal = inicioMinutos + duracaoMinutos;
+  const horaTerminoPedido = normalizarTimeCurto(pedido.horaTermino);
+  let fimShowTotal = inicioShowMinutos + duracaoMinutos;
+
+  if (horaTerminoPedido) {
+    const fimShow = parseHorario(horaTerminoPedido);
+    fimShowTotal = (fimShow.hora * 60) + fimShow.minuto;
+    if (fimShowTotal <= inicioShowMinutos) fimShowTotal += 1440;
+  }
+
+  const inicioAgendaRaw = normalizarTimeCurto(producao?.horaPassagemSom)
+    ? parseHorario(producao.horaPassagemSom)
+    : inicioShow;
+  let inicioAgendaMinutos = (inicioAgendaRaw.hora * 60) + inicioAgendaRaw.minuto;
+  if (inicioAgendaMinutos > fimShowTotal) inicioAgendaMinutos = inicioShowMinutos;
+
+  const fimTotal = Math.max(fimShowTotal, inicioAgendaMinutos + 15);
   const fimOffsetDias = Math.floor(fimTotal / 1440);
   const fimMinutos = fimTotal % 1440;
   const parsedFim = somarDiasData(parsed, fimOffsetDias);
@@ -260,17 +536,20 @@ function montarInicioFimAgenda(pedido) {
   return {
     data: parsed,
     dataIso: formatarDataIsoLocal(parsed),
-    inicio: `${String(inicio.hora).padStart(2, "0")}:${String(inicio.minuto).padStart(2, "0")}`,
+    inicio: `${String(Math.floor(inicioAgendaMinutos / 60)).padStart(2, "0")}:${String(inicioAgendaMinutos % 60).padStart(2, "0")}`,
     fim: `${String(Math.floor(fimMinutos / 60)).padStart(2, "0")}:${String(fimMinutos % 60).padStart(2, "0")}`,
+    inicioShow: `${String(inicioShow.hora).padStart(2, "0")}:${String(inicioShow.minuto).padStart(2, "0")}`,
+    fimShow: `${String(Math.floor(fimShowTotal % 1440 / 60)).padStart(2, "0")}:${String(fimShowTotal % 60).padStart(2, "0")}`,
     start: {
-      dateTime: `${formatarDataIsoLocal(parsed)}T${String(inicio.hora).padStart(2, "0")}:${String(inicio.minuto).padStart(2, "0")}:00`,
+      dateTime: `${formatarDataIsoLocal(parsed)}T${String(Math.floor(inicioAgendaMinutos / 60)).padStart(2, "0")}:${String(inicioAgendaMinutos % 60).padStart(2, "0")}:00`,
       timeZone: CALENDAR_TIME_ZONE,
     },
     end: {
       dateTime: `${formatarDataIsoLocal(parsedFim)}T${String(Math.floor(fimMinutos / 60)).padStart(2, "0")}:${String(fimMinutos % 60).padStart(2, "0")}:00`,
       timeZone: CALENDAR_TIME_ZONE,
     },
-    duracaoMinutos,
+    duracaoMinutos: Math.max(15, fimTotal - inicioAgendaMinutos),
+    duracaoShowMinutos: Math.max(15, fimShowTotal - inicioShowMinutos),
   };
 }
 
@@ -294,7 +573,10 @@ function tituloAgendaPedido(pedido) {
   return `JAZZ CINNAMON - ${cliente} (${tipo}) - ${status.sufixo}`;
 }
 
-function localAgendaPedido(pedido, fallback = "") {
+function localAgendaPedido(pedido, producao = null, fallback = "") {
+  const localProducao = normalizarLocalMapsUrl(producao?.localMapsUrl || producao?.localTexto);
+  if (localProducao) return localProducao;
+
   const localNome = safeText(pedido.local, "");
   const endereco = safeText(pedido.local_evento_endereco || pedido.contratante_endereco || pedido.endereco, "");
   const cidadeUf = pedido.cidade && pedido.uf
@@ -341,28 +623,45 @@ function parseDescricaoAgenda(descricao = "") {
   return state;
 }
 
-function montarDescricaoAgenda(pedido, eventoExistente = null) {
+function montarDescricaoAgenda(pedido, producao = null, eventoExistente = null) {
   const anterior = parseDescricaoAgenda(eventoExistente?.description || "");
-  const local = localAgendaPedido(pedido, eventoExistente?.location || "LOCAL A DEFINIR");
   const cliente = normalizarTextoAgenda(pedido.cliente || pedido.nome_contratante_formal, "CLIENTE");
-  const whatsapp = safeText(pedido.whatsapp || anterior.whatsapp, "S/ WHATSAPP");
-
-  let valor = anterior.valor || "R$ 0,00";
+  const whatsapp = safeText(pedido.whatsapp, anterior.whatsapp || "S/ WHATSAPP");
   const valorPedido = pedido.valor_final_contrato ?? pedido.valor;
-  if (valorPedido !== undefined && valorPedido !== "") {
-    valor = `R$ ${Number(valorPedido || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
-  }
+  const valor = valorPedido !== undefined && valorPedido !== ""
+    ? `R$ ${Number(valorPedido || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+    : (anterior.valor || "R$ 0,00");
+  const periodo = montarInicioFimAgenda(pedido, producao);
+  const empresaSom = valorTextoOuVazio(producao?.empresaSomNome);
+  const responsavel = valorTextoOuVazio(producao?.responsavelNome);
+  const whatsappResponsavel = valorTextoOuVazio(producao?.responsavelWhatsapp);
+  const passagemSom = valorTextoOuVazio(producao?.horaPassagemSom);
+  const sonorizacao = producao?.sonorizacaoTipo ? tituloCaseSimples(producao.sonorizacaoTipo) : "";
+  const bateria = producao?.bateriaTipo ? tituloCaseSimples(producao.bateriaTipo) : (anterior.bateria || "");
+  const trajeBase = producao?.figurinoTraje ? tituloCaseSimples(producao.figurinoTraje) : "";
+  const trajeCor = valorTextoOuVazio(producao?.figurinoCor);
+  const traje = [trajeBase, trajeCor].filter(Boolean).join(" - ") || anterior.traje || "";
+  const observacoes = valorTextoOuVazio(producao?.observacoes) || anterior.obs || "";
+  const camarim = producao?.camarim === "S" ? "Sim" : (producao?.camarim === "N" ? "Nao" : "");
+  const linkProducao = linkFichaProducao(pedido.id || pedido.pedidoId || "");
 
   return [
-    local,
-    "",
-    `${cliente} - ${whatsapp}`,
-    valor,
-    "",
-    `TRAJE: ${anterior.traje}`,
-    `BATERIA: ${anterior.bateria}`,
-    `OBSERVACAO: ${anterior.obs}`,
-  ].join("\n");
+    `CLIENTE: ${cliente}`,
+    `WHATSAPP CLIENTE: ${whatsapp}`,
+    `VALOR: ${valor}`,
+    `INICIO DO SHOW: ${periodo.inicioShow}`,
+    `TERMINO DO SHOW: ${periodo.fimShow}`,
+    passagemSom ? `PASSAGEM DE SOM: ${passagemSom}` : "",
+    sonorizacao ? `SONORIZACAO: ${sonorizacao}` : "",
+    empresaSom ? `EMPRESA DE SOM: ${empresaSom}` : "",
+    responsavel ? `RESPONSAVEL NO EVENTO: ${responsavel}` : "",
+    whatsappResponsavel ? `WHATSAPP RESPONSAVEL: ${whatsappResponsavel}` : "",
+    camarim ? `CAMARIM: ${camarim}` : "",
+    bateria ? `BATERIA: ${bateria}` : "",
+    traje ? `TRAJE: ${traje}` : "",
+    observacoes ? `OBSERVACOES: ${observacoes}` : "",
+    linkProducao ? `Acessar Ficha de Producao: ${linkProducao}` : "",
+  ].filter(Boolean).join("\n");
 }
 
 function disponibilidadePush(pedido) {
@@ -459,6 +758,45 @@ function campoEntrou(before, after, campo) {
   return !valorPresente(before?.[campo]) && valorPresente(after?.[campo]);
 }
 
+function roleAssinaturaPush(data = {}) {
+  const role = String(data.role || "").trim().toLowerCase();
+  if (role === "admin" || role === "producao") return role;
+  return rolePorEmail(data.email || "");
+}
+
+function emailsRelacionadosPedido(pedido = {}) {
+  return [
+    pedido.ownerEmail,
+    pedido.createdByEmail,
+    pedido.criadorEmail,
+    pedido.origemCriadorEmail,
+  ].map((item) => String(item || "").trim().toLowerCase()).filter(Boolean);
+}
+
+function uidsRelacionadosPedido(pedido = {}) {
+  return [
+    pedido.ownerUid,
+    pedido.createdByUid,
+    pedido.criadorUid,
+  ].map((item) => String(item || "").trim()).filter(Boolean);
+}
+
+function assinaturaPodeReceberPush(data = {}, pedido = {}) {
+  const role = roleAssinaturaPush(data);
+  if (role === "admin") return true;
+  if (role !== "producao") return false;
+
+  const email = String(data.email || "").trim().toLowerCase();
+  const uid = String(data.uid || "").trim();
+  if (email && emailsRelacionadosPedido(pedido).includes(email)) return true;
+  if (uid && uidsRelacionadosPedido(pedido).includes(uid)) return true;
+
+  const atendimento = atendimentoPedidoPadrao(pedido);
+  if (atendimento === "Serginho" && (!email || PRODUCAO_EMAILS.includes(email))) return true;
+
+  return false;
+}
+
 async function atualizarStatusPush(pedidoRef, tipoNotificacao, status, extras = {}) {
   const prefixo = prefixoStatusPush(tipoNotificacao);
   await pedidoRef.update({
@@ -486,6 +824,16 @@ async function enviarPushPedido(pedido, pedidoId, pedidoRef, tipoNotificacao) {
     return;
   }
 
+  const subscriptionsDocs = subscriptionsSnap.docs.filter((subscriptionDoc) =>
+    assinaturaPodeReceberPush(subscriptionDoc.data() || {}, pedido),
+  );
+  if (!subscriptionsDocs.length) {
+    await atualizarStatusPush(pedidoRef, tipoNotificacao, "SEM_INSCRICOES", {
+      [`${prefixoStatusPush(tipoNotificacao)}Erro`]: "Nenhuma inscricao elegivel para este pedido.",
+    });
+    return;
+  }
+
   const push = montarPushPedido(pedido, pedidoId, tipoNotificacao);
   const payload = JSON.stringify({
     title: push.title,
@@ -503,7 +851,7 @@ async function enviarPushPedido(pedido, pedidoId, pedidoRef, tipoNotificacao) {
   let enviadas = 0;
   let falhas = 0;
 
-  await Promise.all(subscriptionsSnap.docs.map(async (subscriptionDoc) => {
+  await Promise.all(subscriptionsDocs.map(async (subscriptionDoc) => {
     const subscription = subscriptionDoc.data().subscription;
     if (!subscription || !subscription.endpoint) {
       falhas += 1;
@@ -1141,11 +1489,11 @@ async function buscarEventoAgenda(calendar, agendaId) {
   }
 }
 
-async function buscarEventoPorAssinaturaPedido(calendar, pedido) {
-  const assinatura = assinaturaAgendaPedido(pedido);
+async function buscarEventoPorAssinaturaPedido(calendar, pedido, producao = null) {
+  const assinatura = assinaturaAgendaPedido(pedido, producao);
   if (!assinatura) return null;
 
-  const periodo = montarInicioFimAgenda(pedido);
+  const periodo = montarInicioFimAgenda(pedido, producao);
   const diaSeguinte = formatarDataIsoLocal(somarDiasData(periodo.data, 1));
   const { data } = await calendar.events.list({
     calendarId: getCalendarId(),
@@ -1171,26 +1519,44 @@ async function deletarEventoAgenda(calendar, agendaId) {
   return true;
 }
 
-function recursoEventoAgenda(pedido, eventoExistente = null) {
-  const periodo = montarInicioFimAgenda(pedido);
+function recursoEventoAgenda(pedido, eventoExistente = null, producao = null) {
+  const periodo = montarInicioFimAgenda(pedido, producao);
   const status = statusConfigAgenda(pedido.status);
-  const location = localAgendaPedido(pedido, eventoExistente?.location || "");
+  const location = localAgendaPedido(pedido, producao, eventoExistente?.location || "");
+  const description = montarDescricaoAgenda(pedido, producao, eventoExistente);
+  const projectionHash = [
+    tituloAgendaPedido(pedido),
+    location,
+    periodo.start.dateTime,
+    periodo.end.dateTime,
+    String(description.length),
+    description.slice(0, 120),
+  ].join("|").slice(0, 480);
 
   return {
     summary: tituloAgendaPedido(pedido),
     location,
-    description: montarDescricaoAgenda(pedido, eventoExistente),
+    description,
     start: periodo.start,
     end: periodo.end,
     colorId: status.colorId,
+    extendedProperties: {
+      private: {
+        pedidoId: String(pedido.id || pedido.pedidoId || ""),
+        source: "gestao_master",
+        projectionHash,
+      },
+    },
   };
 }
 
 async function sincronizarDocumentoPedidoComAgenda(pedidoRef, pedidoId, pedido, origem = "manual") {
   const calendar = await getCalendarClient();
-  const agendaIdAtual = pedido.agendaId || pedido.agendaEventId || "";
+  const pedidoComId = { id: pedidoId, ...pedido };
+  const agendaIdAtual = pedidoComId.agendaId || pedidoComId.agendaEventId || "";
+  const producao = await carregarProducaoEvento(pedidoId, pedidoComId);
 
-  if (!statusAtivoAgenda(pedido.status)) {
+  if (!statusAtivoAgenda(pedidoComId.status)) {
     let removido = false;
     if (agendaIdAtual) removido = await deletarEventoAgenda(calendar, agendaIdAtual);
     await pedidoRef.set({
@@ -1206,9 +1572,9 @@ async function sincronizarDocumentoPedidoComAgenda(pedidoRef, pedidoId, pedido, 
 
   let eventoExistente = agendaIdAtual ? await buscarEventoAgenda(calendar, agendaIdAtual) : null;
   if (!eventoExistente) {
-    eventoExistente = await buscarEventoPorAssinaturaPedido(calendar, pedido);
+    eventoExistente = await buscarEventoPorAssinaturaPedido(calendar, pedidoComId, producao);
   }
-  const resource = recursoEventoAgenda(pedido, eventoExistente);
+  const resource = recursoEventoAgenda(pedidoComId, eventoExistente, producao);
   let evento;
   let criado = false;
 
@@ -1619,9 +1985,9 @@ function normalizarChaveAgenda(value) {
     .toUpperCase();
 }
 
-function assinaturaAgendaPedido(pedido) {
+function assinaturaAgendaPedido(pedido, producao = null) {
   try {
-    const periodo = montarInicioFimAgenda(pedido);
+    const periodo = montarInicioFimAgenda(pedido, producao);
     return `${periodo.dataIso}|${periodo.inicio}|${normalizarChaveAgenda(tituloAgendaPedido(pedido))}`;
   } catch (error) {
     return "";
@@ -1637,7 +2003,7 @@ function assinaturaAgendaEvento(event) {
   return `${dataIso}|${hora}|${normalizarChaveAgenda(event?.summary)}`;
 }
 
-function buscarEventoGoogleDoPedido(pedido, maps) {
+function buscarEventoGoogleDoPedido(pedido, maps, producao = null) {
   const chaves = [
     ...variantesAgendaId(pedido.agendaId),
     ...variantesAgendaId(pedido.agendaIcalUid),
@@ -1648,13 +2014,13 @@ function buscarEventoGoogleDoPedido(pedido, maps) {
     if (evento) return evento;
   }
 
-  const assinatura = assinaturaAgendaPedido(pedido);
+  const assinatura = assinaturaAgendaPedido(pedido, producao);
   return assinatura ? maps.byAssinatura.get(assinatura) || null : null;
 }
 
-function eventoEsperadoDiverge(pedido, evento) {
+function eventoEsperadoDiverge(pedido, evento, producao = null) {
   try {
-    const esperado = recursoEventoAgenda(pedido, evento);
+    const esperado = recursoEventoAgenda(pedido, evento, producao);
     const inicioAtual = partesLocaisEventoGoogle(evento.start?.dateTime || evento.start?.date);
     const fimAtual = partesLocaisEventoGoogle(evento.end?.dateTime || evento.end?.date);
     const inicioEsperado = partesLocaisEventoGoogle(esperado.start.dateTime);
@@ -1669,6 +2035,7 @@ function eventoEsperadoDiverge(pedido, evento) {
     if ((evento.summary || "") !== esperado.summary) divergencias.push("titulo/status");
     if ((evento.colorId || "") !== (esperado.colorId || "")) divergencias.push("cor");
     if ((evento.location || "") !== (esperado.location || "")) divergencias.push("local");
+    if ((evento.description || "") !== (esperado.description || "")) divergencias.push("descricao");
     if (!mesmaDataHora(inicioAtual, inicioEsperado)) divergencias.push("inicio");
     if (!mesmaDataHora(fimAtual, fimEsperado)) divergencias.push("termino");
     return divergencias;
@@ -1690,12 +2057,24 @@ async function conferirAgenda() {
     if (pedidoDentroDoIntervalo(pedido, agora, fimAno)) pedidos.push(pedido);
   });
 
+  const producaoSnaps = await Promise.all(
+    pedidos.map((pedido) => db.collection("producao_eventos").doc(pedido.id).get()),
+  );
+  const producaoPorPedido = new Map();
+  producaoSnaps.forEach((snap, index) => {
+    if (!snap.exists) return;
+    producaoPorPedido.set(pedidos[index].id, {
+      ...producaoEventoDefault(pedidos[index].id, pedidos[index], snap.data()),
+      ...snap.data(),
+    });
+  });
+
   const chavesPedidosAgenda = new Set();
   const assinaturasPedidosAgenda = new Set();
   pedidos.forEach((pedido) => {
     adicionarVariantesAgenda(chavesPedidosAgenda, pedido.agendaId);
     adicionarVariantesAgenda(chavesPedidosAgenda, pedido.agendaIcalUid);
-    const assinatura = assinaturaAgendaPedido(pedido);
+    const assinatura = assinaturaAgendaPedido(pedido, producaoPorPedido.get(pedido.id));
     if (assinatura) assinaturasPedidosAgenda.add(assinatura);
   });
 
@@ -1711,7 +2090,8 @@ async function conferirAgenda() {
   const divergentes = [];
 
   pedidos.forEach((pedido) => {
-    const evento = buscarEventoGoogleDoPedido(pedido, maps);
+    const producao = producaoPorPedido.get(pedido.id) || null;
+    const evento = buscarEventoGoogleDoPedido(pedido, maps, producao);
 
     if (!evento) {
       ausentes.push({
@@ -1726,7 +2106,7 @@ async function conferirAgenda() {
       return;
     }
 
-    const divergencias = eventoEsperadoDiverge(pedido, evento);
+    const divergencias = eventoEsperadoDiverge(pedido, evento, producao);
     if (divergencias.length) {
       divergentes.push({
         pedidoId: pedido.id,
@@ -1801,15 +2181,182 @@ async function importarEventoGoogleParaErp(eventId) {
   return { success: true, pedidoId: docRef.id };
 }
 
-async function exigirAdminAgenda(req) {
+async function carregarPedidoAtivoOuFalhar(pedidoId) {
+  const id = String(pedidoId || "").trim();
+  if (!id) throw new Error("PEDIDO_ID_OBRIGATORIO");
+
+  const pedidoRef = db.collection("pedidos").doc(id);
+  const pedidoSnap = await pedidoRef.get();
+  if (!pedidoSnap.exists) throw new Error("PEDIDO_NAO_ENCONTRADO");
+
+  const pedido = { id: pedidoSnap.id, ...pedidoSnap.data() };
+  if (["REPROVADO", "LIXEIRA"].includes(String(pedido.status || "").toUpperCase())) {
+    throw new Error("PEDIDO_INDISPONIVEL");
+  }
+
+  return { pedidoRef, pedidoSnap, pedido };
+}
+
+async function carregarRespostaProducao(pedidoId) {
+  const { pedido } = await carregarPedidoAtivoOuFalhar(pedidoId);
+  const [producao, parceirosSom] = await Promise.all([
+    carregarProducaoEvento(pedidoId, pedido),
+    listarParceirosSom(),
+  ]);
+
+  return {
+    success: true,
+    pedidoId,
+    producao,
+    parceirosSom,
+  };
+}
+
+async function cadastrarParceiroSom(body = {}, actor = {}) {
+  const nome = valorTextoSeguro(body.nome);
+  if (!nome) throw new Error("NOME_EMPRESA_OBRIGATORIO");
+
+  const nomeNormalizado = nomeNormalizadoParceiro(nome);
+  const existentes = await db.collection("parceiros_som")
+    .where("nomeNormalizado", "==", nomeNormalizado)
+    .limit(1)
+    .get();
+
+  let parceiroRef;
+  if (!existentes.empty) {
+    parceiroRef = existentes.docs[0].ref;
+  } else {
+    parceiroRef = db.collection("parceiros_som").doc();
+    await parceiroRef.set({
+      nome,
+      nomeNormalizado,
+      ativo: true,
+      responsavelNome: valorTextoSeguro(body.responsavelNome),
+      whatsapp: normalizarWhatsAppBr(body.whatsapp),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdByUid: actor.uid || "",
+      createdByEmail: actor.email || "",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedByUid: actor.uid || "",
+      updatedByEmail: actor.email || "",
+    }, { merge: true });
+  }
+
+  const parceiroSnap = await parceiroRef.get();
+  return {
+    success: true,
+    parceiro: { id: parceiroSnap.id, ...parceiroSnap.data() },
+    parceirosSom: await listarParceirosSom(),
+  };
+}
+
+async function salvarFichaProducao(body = {}, actor = {}) {
+  const pedidoId = String(body.pedidoId || "").trim();
+  const { pedido } = await carregarPedidoAtivoOuFalhar(pedidoId);
+  const producaoRef = db.collection("producao_eventos").doc(pedidoId);
+  const producaoSnap = await producaoRef.get();
+  const before = producaoEventoDefault(pedidoId, pedido, producaoSnap.exists ? producaoSnap.data() : {});
+
+  let payload = producaoEventoPayload(body, pedidoId, pedido);
+  const convidados = parseInt(String(pedido.convidados || "0"), 10) || 0;
+  if (convidados > 80) payload.sonorizacaoTipo = "terceirizada";
+
+  if (payload.empresaSomId) {
+    const parceiroSnap = await db.collection("parceiros_som").doc(payload.empresaSomId).get();
+    if (parceiroSnap.exists) {
+      payload.empresaSomNome = valorTextoSeguro(parceiroSnap.data().nome, payload.empresaSomNome);
+    } else {
+      payload.empresaSomId = "";
+      payload.empresaSomNome = "";
+    }
+  }
+
+  payload = {
+    ...payload,
+    localTexto: payload.localMapsUrl,
+  };
+
+  const basePersistencia = {
+    ...payload,
+    pedidoId,
+    clienteSnapshot: valorTextoSeguro(pedido.cliente || pedido.nome_contratante_formal),
+    dataEventoSnapshot: valorTextoSeguro(pedido.dataStr || pedido.data),
+    cidadeUfSnapshot: [pedido.cidade || "", pedido.uf || ""].filter(Boolean).join("-"),
+    horaShowInicioSnapshot: valorTextoSeguro(pedido.horaInicio),
+    horaShowFimSnapshot: valorTextoSeguro(pedido.horaTermino || calcularHoraTermino(pedido.horaInicio, pedido.duracao)),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedByUid: actor.uid || "",
+    updatedByEmail: actor.email || "",
+    updatedByRole: actor.role || "",
+    updatedByName: actor.nome || "",
+    syncStatus: "PROCESSANDO",
+    syncError: admin.firestore.FieldValue.delete(),
+  };
+
+  if (!producaoSnap.exists) {
+    basePersistencia.createdAt = admin.firestore.FieldValue.serverTimestamp();
+    basePersistencia.createdByUid = actor.uid || "";
+    basePersistencia.createdByEmail = actor.email || "";
+  }
+
+  await producaoRef.set(basePersistencia, { merge: true });
+  await registrarLogsProducao(pedidoId, before, payload, actor);
+
+  try {
+    const sync = await sincronizarGrupoPorPedidoId(pedidoId, "painel_producao");
+    await producaoRef.set({
+      syncStatus: "SINCRONIZADO",
+      syncUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      syncError: admin.firestore.FieldValue.delete(),
+      agendaId: sync.agendaId || "",
+      agendaIcalUid: sync.agendaIcalUid || "",
+    }, { merge: true });
+
+    return {
+      success: true,
+      pedidoId,
+      agendaId: sync.agendaId || "",
+      agendaIcalUid: sync.agendaIcalUid || "",
+      producao: {
+        ...before,
+        ...payload,
+      },
+    };
+  } catch (error) {
+    await producaoRef.set({
+      syncStatus: "ERRO",
+      syncUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      syncError: String(error.message || error).slice(0, 500),
+    }, { merge: true });
+    throw error;
+  }
+}
+
+async function decodificarTokenAgenda(req, obrigatorio = true) {
   const authHeader = String(req.get("Authorization") || "");
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  if (!match) throw new Error("NAO_AUTORIZADO");
+  if (!match) {
+    if (obrigatorio) throw new Error("NAO_AUTORIZADO");
+    return null;
+  }
 
-  const decoded = await admin.auth().verifyIdToken(match[1]);
-  const email = String(decoded.email || "").toLowerCase();
-  if (!ADMIN_EMAILS.includes(email)) throw new Error("NAO_AUTORIZADO");
-  return decoded;
+  return admin.auth().verifyIdToken(match[1]);
+}
+
+function actorAgenda(decoded = {}) {
+  return {
+    uid: decoded?.uid || "",
+    email: String(decoded?.email || "").toLowerCase(),
+    nome: nomeUsuarioSistema(decoded),
+    role: resolverRoleUsuario(decoded),
+  };
+}
+
+async function exigirAcessoAgenda(req, niveis = ["admin"]) {
+  const decoded = await decodificarTokenAgenda(req, true);
+  const role = resolverRoleUsuario(decoded);
+  if (!niveis.includes(role)) throw new Error("NAO_AUTORIZADO");
+  return { decoded, role, actor: actorAgenda(decoded) };
 }
 
 exports.getDadosConversao = onRequest({
@@ -1830,7 +2377,7 @@ exports.getDadosConversao = onRequest({
   }
 
   try {
-    await exigirAdminAgenda(req);
+    await exigirAcessoAgenda(req, ["admin"]);
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
     const resultado = await calcularDadosConversao(body.mes, body.ano);
     sendJson(res, 200, resultado);
@@ -2001,21 +2548,50 @@ exports.agendaApi = onRequest({
       return;
     }
 
-    await exigirAdminAgenda(req);
+    if (acao === "PRODUCAO_REGISTRAR_TENTATIVA") {
+      const decoded = await decodificarTokenAgenda(req, false);
+      await registrarTentativaAcessoProducao(req, String(body.pedidoId || ""), decoded);
+      sendJson(res, 200, { success: true });
+      return;
+    }
 
     if (acao === "AGENDA_SINCRONIZAR_PEDIDO") {
+      await exigirAcessoAgenda(req, ["admin", "producao"]);
       const resultado = await sincronizarGrupoPorPedidoId(String(body.pedidoId || ""), "painel");
       sendJson(res, 200, resultado);
       return;
     }
 
+    if (acao === "PRODUCAO_CARREGAR") {
+      await exigirAcessoAgenda(req, ["admin", "producao"]);
+      const resultado = await carregarRespostaProducao(String(body.pedidoId || ""));
+      sendJson(res, 200, resultado);
+      return;
+    }
+
+    if (acao === "PRODUCAO_CADASTRAR_EMPRESA") {
+      const { actor } = await exigirAcessoAgenda(req, ["admin", "producao"]);
+      const resultado = await cadastrarParceiroSom(body, actor);
+      sendJson(res, 200, resultado);
+      return;
+    }
+
+    if (acao === "PRODUCAO_SALVAR") {
+      const { actor } = await exigirAcessoAgenda(req, ["admin", "producao"]);
+      const resultado = await salvarFichaProducao(body, actor);
+      sendJson(res, 200, resultado);
+      return;
+    }
+
     if (acao === "AGENDA_CONFERIR") {
+      await exigirAcessoAgenda(req, ["admin"]);
       const resultado = await conferirAgenda();
       sendJson(res, 200, resultado);
       return;
     }
 
     if (acao === "AGENDA_IMPORTAR_EVENTO") {
+      await exigirAcessoAgenda(req, ["admin"]);
       const resultado = await importarEventoGoogleParaErp(String(body.eventId || ""));
       sendJson(res, 200, resultado);
       return;
@@ -2024,7 +2600,9 @@ exports.agendaApi = onRequest({
     sendJson(res, 400, { success: false, error: "Acao invalida." });
   } catch (error) {
     logger.error("Erro na API de agenda.", error);
-    const code = ["NAO_AUTORIZADO", "PEDIDO_NAO_ENCONTRADO"].includes(error.message) ? 403 : 500;
+    const code = ["NAO_AUTORIZADO"].includes(error.message)
+      ? 403
+      : (["PEDIDO_NAO_ENCONTRADO", "PEDIDO_INDISPONIVEL", "PEDIDO_ID_OBRIGATORIO", "NOME_EMPRESA_OBRIGATORIO"].includes(error.message) ? 400 : 500);
     sendJson(res, code, { success: false, error: error.message || "Erro interno." });
   }
 });
@@ -2078,6 +2656,35 @@ exports.sincronizarAgendaPedido = onDocumentWritten({
       logger.error("Falha ao gravar erro de sincronizacao da agenda.", writeError);
     }
   }
+});
+
+exports.auditarStatusPedido = onDocumentWritten({
+  document: "pedidos/{pedidoId}",
+  region: REGION,
+}, async (event) => {
+  const beforeSnap = event.data?.before;
+  const afterSnap = event.data?.after;
+  if (!beforeSnap?.exists || !afterSnap?.exists) return;
+
+  const before = beforeSnap.data() || {};
+  const after = afterSnap.data() || {};
+  const statusAntes = normalizarStatusConversao(before.status);
+  const statusDepois = normalizarStatusConversao(after.status);
+  if (statusAntes === statusDepois) return;
+
+  await db.collection("pedidos").doc(event.params.pedidoId).collection("logs").add({
+    type: "status_change",
+    field: "status",
+    before: before.status || "",
+    after: after.status || "",
+    message: `${valorTextoSeguro(after.statusUpdatedByName, "Usuario do sistema")} alterou Status de "${before.status || "vazio"}" para "${after.status || "vazio"}"`,
+    actorUid: after.statusUpdatedByUid || "",
+    actorEmail: after.statusUpdatedByEmail || "",
+    actorName: after.statusUpdatedByName || "",
+    actorRole: after.statusUpdatedByRole || "",
+    source: "painel_status",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
 });
 
 exports.notificarNovoOrcamento = onDocumentCreated({
