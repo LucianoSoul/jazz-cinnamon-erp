@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contrato Jazz Cinnamon</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 20mm 18mm 20mm;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      color: #000000;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11pt;
+      line-height: 1.35;
+    }
+
+    body {
+      counter-reset: page;
+    }
+
+    .page {
+      min-height: 257mm;
+      page-break-after: always;
+      break-after: page;
+    }
+
+    .page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+
+    .contract-header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      margin: 0 0 18px;
+      text-align: center;
+    }
+
+    .logo-jazz {
+      width: 96px;
+      height: auto;
+    }
+
+    .logo-prod {
+      width: 142px;
+      height: auto;
+    }
+
+    h1 {
+      margin: 0 0 18px;
+      font-family: Calibri, Arial, Helvetica, sans-serif;
+      font-size: 13pt;
+      line-height: 1.2;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin: 14px 0 8px;
+      font-family: Calibri, Arial, Helvetica, sans-serif;
+      font-size: 12pt;
+      line-height: 1.25;
+      text-transform: uppercase;
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+
+    p {
+      margin: 0 0 9px;
+      text-align: justify;
+      text-justify: inter-word;
+      orphans: 3;
+      widows: 3;
+    }
+
+    strong {
+      font-weight: 700;
+    }
+
+    .party {
+      margin-bottom: 12px;
+    }
+
+    .clause {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .page-break-before {
+      page-break-before: always;
+      break-before: page;
+    }
+
+    .payment-clause {
+      white-space: normal;
+    }
+
+    .signatures {
+      margin-top: 32px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .contract-date {
+      margin-top: 24px;
+    }
+
+    .signature-block {
+      text-align: center;
+    }
+
+    .signature-line {
+      border-top: 1px solid #000000;
+      margin: 38px 0 8px;
+      height: 1px;
+    }
+
+    .signature-block p {
+      margin: 0 0 3px;
+      text-align: center;
+      line-height: 1.25;
+    }
+
+    .rider-page {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .rider-page img {
+      width: 100%;
+      max-height: 245mm;
+      object-fit: contain;
+    }
+
+    @media screen {
+      body {
+        background: #e9e9e9;
+      }
+
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 16px auto;
+        padding: 18mm 20mm;
+        background: #ffffff;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
+      }
+    }
+  </style>
+</head>
+<body>
+  <section class="page contract-page">
+    <header class="contract-header">
+      <img class="logo-jazz" alt="Jazz Cinnamon" src="images/image1.png">
+      <img class="logo-prod" alt="O Jazz Nosso de Cada Dia" src="images/image2.png">
+    </header>
+
+    <h1>Contrato de Grupo Musical por Prazo Determinado</h1>
+
+    <p class="party"><strong>CONTRATANTE:</strong> {{Nome Contratante}}, inscrito no CNPJ sob n.º {{CNPJ}}, domiciliado na cidade de {{CIDADE CNPJ}} - {{ESTADO CNPJ}}, à {{ENDEREÇO CNPJ}} - CEP {{CEP CNPJ}}.</p>
+
+    <p class="party"><strong>CONTRATADA:</strong> JAZZ CINNAMON, representada por PRODUTORA O JAZZ NOSSO DE CADA DIA LTDA, inscrita no CNPJ sob o n.º 50.322.210/0001-74, com sede em Nova Petrópolis - RS, à Rua Danilo Hass, n.º 67, Bairro Juriti - CEP: 95150-000.</p>
+
+    <p>As partes acima identificadas têm, entre si, justo e acertado o presente contrato de apresentação de música ao vivo por prazo determinado, que será regido pelas cláusulas seguintes e pelas condições descritas neste instrumento.</p>
+
+    <div class="clause">
+      <h2>1 - Do Objeto do Contrato</h2>
+      <p>A EQUIPE CONTRATADA obriga-se a prestar seus serviços profissionais ao CONTRATANTE no dia {{DATA EVE CNPJ}}, na cidade de {{MUN EVE CNPJ}} - {{EST EVE CNPJ}} ({{LOCAL EVE CNPJ}} - {{END EVE CNPJ}}), com horário de início fixado às {{INICIO CNPJ}}, para apresentação de música ao vivo com a Banda Jazz Cinnamon pelo período de {{TEMP EVE CNPJ}}.</p>
+      <p>Fica estabelecida tolerância máxima de 30 (trinta) minutos de atraso para o início da apresentação por parte da organização do evento. Ultrapassada a tolerância, o relógio da apresentação será iniciado e o tempo de atraso será descontado proporcionalmente do tempo total contratado de {{TEMP EVE CNPJ}}, salvo exceções e imprevistos, como atrasos em cerimônias, que sejam avaliados e mutuamente acordados entre a CONTRATADA e o CONTRATANTE no momento do evento.</p>
+      <p>Caso seja do interesse do CONTRATANTE estender a apresentação, e havendo disponibilidade de agenda da EQUIPE CONTRATADA, será cobrado o valor adicional de R$ 1.500,00 (mil e quinhentos reais) por cada hora extra ou fração de hora. O pagamento referente à hora extra deverá ser confirmado pela CONTRATADA antes do início do tempo adicional.</p>
+    </div>
+
+    <div class="clause">
+      <h2>2 - Da Remuneração e Forma de Pagamento</h2>
+      <p>O presente serviço será remunerado pela quantia de {{VALOR ORC}} ({{VALOR EXTENSO}}).</p>
+      <p class="payment-clause">{{CLAUSULA_PAGAMENTO}}</p>
+    </div>
+
+    <div class="clause">
+      <h2>3 - Dos Equipamentos e Espaço</h2>
+      <p>A CONTRATANTE fornecerá equipamentos para a sonorização conforme citado no rider técnico em anexo fornecido pela CONTRATADA, constituídos de caixas de som, inclusive de retorno, condizentes com o espaço e o número de pessoas presentes. A CONTRATANTE compromete-se a garantir espaço adequado para a realização da apresentação, livre de intempéries climáticas. Os instrumentos musicais utilizados na apresentação são de responsabilidade da EQUIPE CONTRATADA.</p>
+    </div>
+  </section>
+
+  <section class="page contract-page page-break-before">
+    <div class="clause page-break-before">
+      <h2>4 - Das Despesas</h2>
+      <p>As despesas com alvarás e direitos autorais das entidades arrecadadoras serão de responsabilidade exclusiva da CONTRATANTE.</p>
+      <p>As despesas com os cachês dos integrantes da Banda, hospedagem e deslocamento, quando se fizerem necessárias, serão de responsabilidade da CONTRATADA.</p>
+    </div>
+
+    <div class="clause">
+      <h2>5 - Do Prazo e Cronograma de Montagem</h2>
+      <p>O presente contrato tem vigência a contar da data de assinatura até a finalização da apresentação, incluindo a desmontagem total da estrutura.</p>
+      <p>A equipe técnica e os músicos chegarão ao local com antecedência máxima de 3 (três) horas em relação ao horário de início da apresentação, período destinado exclusivamente à montagem e passagem de som. Caso o cronograma estipulado pelo CONTRATANTE exija que a montagem seja finalizada com antecedência superior a este limite, torna-se obrigatória a disponibilização de camarim privativo, ou acomodação adequada e confortável para repouso da equipe, e será cobrada Taxa de Ociosidade (Standby) no valor de R$ {{VALOR STANDBY}} ({{VALOR_STANDBY_EXTENSO}}) por hora adicional de espera da equipe no local.</p>
+    </div>
+
+    <div class="clause">
+      <h2>6 - Das Demais Obrigações do Contratante</h2>
+      <p>A CONTRATANTE deverá disponibilizar alimentação para cinco pessoas.</p>
+      <p>A CONTRATANTE deverá disponibilizar local adequado para troca de vestimentas e espera para a apresentação.</p>
+    </div>
+
+    <div class="clause">
+      <h2>7 - Penalidades</h2>
+      <p>O não comparecimento da CONTRATADA na data do evento acarretará a devolução total do valor pago pela CONTRATANTE, acrescido de multa de 10% (dez por cento) sobre esse valor. Em caso de desistência do evento, a CONTRATANTE deverá comunicar a CONTRATADA com até 60 (sessenta) dias de antecedência. Não havendo aviso prévio, o valor mencionado no item 2 não será reembolsado ao CONTRATANTE.</p>
+      <p>Reembolsos de valores por desistência do CONTRATANTE anteriores ao prazo de 60 (sessenta) dias serão acordados entre as partes mediante exposição do ocorrido para o cancelamento ou troca de data do evento. Em caso de qualquer impedimento ao início da apresentação da EQUIPE CONTRATADA ocasionado pelo CONTRATANTE, este compromete-se a pagar o valor total acordado. A EQUIPE CONTRATADA não se responsabilizará por eventos externos à sua responsabilidade que possam impedir a conclusão da apresentação, permanecendo o ajustado entre as partes previamente. (Vide item 8 do Caso Fortuito e da Força Maior).</p>
+    </div>
+
+  </section>
+
+  <section class="page contract-page page-break-before">
+    <div class="clause">
+      <h2>8 - Do Caso Fortuito e da Força Maior</h2>
+      <p>a) A CONTRATADA não será responsabilizada pela não realização da apresentação caso ocorram eventos de força maior ou caso fortuito, de acordo com o Art. 393 do Código Civil Brasileiro, tais como:</p>
+      <p>- incêndios ou avarias na estrutura do local;<br>- enchentes que impeçam o acesso; falta de energia elétrica na região; decretos governamentais;<br>- pandemias ou problemas graves de saúde de membros essenciais da banda.</p>
+      <p>b) Problemas com alvarás, vistorias de bombeiros ou falhas nos equipamentos fornecidos pela CONTRATANTE não configuram força maior, devendo a mesma pagar o cachê integral.</p>
+      <p>I - A comunicação deve ser imediata, por escrito, para que a revisão e/ou suspensão temporária das parcelas e repactuação de datas de pagamentos e do evento evitem juros ou penalidades por atraso.</p>
+      <p>c) Em caso de força maior real, (vide alínea a), as partes tentarão remarcar o show, conforme disponibilidade de agenda da CONTRATADA, em até 60 (sessenta) dias, aproveitando o sinal já pago.</p>
+      <p>I - Caso o evento não possa ocorrer de forma nenhuma, o contrato será cancelado e os valores pagos podem ser creditados sem retenção de multas punitivas.</p>
+      <p>d) Se a remarcação for impossível por força maior, o contrato será rescindido sem multas, aplicando-se as regras abaixo sobre o sinal:</p>
+      <p>I - Se o evento de força maior atingir a CONTRATANTE ou o local: a CONTRATADA reterá o valor integral do sinal para cobrir os custos de reserva de agenda, ensaios e equipe técnica.</p>
+      <p>II - Se o evento de força maior atingir a CONTRATADA, a mesma devolverá o valor do sinal integralmente à CONTRATANTE, no prazo de até 15 dias úteis, deduzidos apenas os custos logísticos comprovadamente já pagos e não reembolsáveis.</p>
+      <p>e) A CONTRATADA fica totalmente isenta do pagamento de qualquer multa rescisória, indenização por danos morais ou lucros cessantes decorrentes do cancelamento motivado por força maior.</p>
+    </div>
+  </section>
+
+  <section class="page contract-page page-break-before">
+    <div class="clause">
+      <h2>9 - Do Foro</h2>
+      <p>Fica eleito o foro da Comarca de Nova Petrópolis - RS para dirimir qualquer conflito decorrente deste contrato.</p>
+    </div>
+
+    <p class="contract-date">Nova Petrópolis, {{DATA CONTRATO}}.</p>
+
+    <div class="signatures">
+      <div class="signature-block">
+        <div class="signature-line"></div>
+        <p><strong>Contratante</strong></p>
+        <p>{{Nome Contratante}}</p>
+        <p>{{CNPJ}}</p>
+      </div>
+
+      <div class="signature-block">
+        <div class="signature-line"></div>
+        <p><strong>Contratada</strong></p>
+        <p>Camila Sampaio de Oliveira</p>
+        <p>O JAZZ NOSSO DE CADA DIA LTDA (Jazz Cinnamon)</p>
+        <p>50.322.210/0001-74</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="page rider-page">
+    <img alt="Rider técnico Jazz Cinnamon" src="images/image3.jpg">
+  </section>
+</body>
+</html>
